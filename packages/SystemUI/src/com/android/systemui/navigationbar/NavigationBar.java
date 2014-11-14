@@ -1312,6 +1312,7 @@ public class NavigationBar extends ViewController<NavigationBarView> implements 
 
         ButtonDispatcher homeButton = mView.getHomeButton();
         homeButton.setOnTouchListener(this::onHomeTouch);
+        homeButton.setLongClickable(true);
 
         reconfigureHomeLongClick();
 
@@ -1382,6 +1383,7 @@ public class NavigationBar extends ViewController<NavigationBarView> implements 
         if (!mView.isRecentsButtonVisible() && mScreenPinningActive) {
             return onLongPressBackHome(v);
         }
+<<<<<<< HEAD
         if (shouldDisableNavbarGestures()) {
             return false;
         }
@@ -1404,6 +1406,9 @@ public class NavigationBar extends ViewController<NavigationBarView> implements 
         }
         mCentralSurfacesOptionalLazy.get().ifPresent(CentralSurfaces::awakenDreams);
         mView.abortCurrentGesture();
+        KeyButtonView keyButtonView = (KeyButtonView) v;
+        keyButtonView.sendEvent(KeyEvent.ACTION_DOWN, KeyEvent.FLAG_LONG_PRESS);
+        keyButtonView.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_LONG_CLICKED);
         return true;
     }
 
