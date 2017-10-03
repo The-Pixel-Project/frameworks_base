@@ -581,7 +581,9 @@ public class NotificationPanelViewControllerBaseTest extends SysuiTestCase {
                 mBrightnessMirrorShowingRepository,
                 new BlurConfig(0f, 0f),
                 () -> mKosmos.getFakeShadeDisplaysRepository());
-        mNotificationPanelViewController.initDependencies(
+                mBrightnessMirrorShowingInteractor,
+                mContext);
+                mNotificationPanelViewController.initDependencies(
                 mCentralSurfaces,
                 null,
                 () -> {},
