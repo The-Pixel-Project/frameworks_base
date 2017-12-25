@@ -1001,7 +1001,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.APP_SWITCH_WAKE_SCREEN), false, this,
                     UserHandle.USER_ALL);
-<<<<<<< HEAD
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.VOLUME_WAKE_SCREEN), false, this,
                     UserHandle.USER_ALL);
@@ -1009,11 +1008,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     Settings.System.VOLUME_ANSWER_CALL), false, this,
                     UserHandle.USER_ALL);
                     updateSettings();
-=======
-
-            updateSettings();
->>>>>>> 251a324a2765 (Reimplement device hardware wake keys support)
-        }
+       }
 
         @Override public void onChange(boolean selfChange) {
             updateSettings();
