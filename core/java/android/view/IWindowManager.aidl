@@ -1055,6 +1055,7 @@ interface IWindowManager
     */
     List<ComponentName> notifyScreenshotListeners(int displayId);
 
+<<<<<<< HEAD
     /**
      * Replace the content of the displayId with the SurfaceControl passed in. This can be used for
      * tests when creating a VirtualDisplay, but only want to capture specific content and not
@@ -1083,4 +1084,10 @@ interface IWindowManager
 
 
     void unregisterTrustedPresentationListener(in ITrustedPresentationListener listener, int id);
+
+
+    /**
+     * Notifies DisplayPolicy that overlays changed.
+     */
+    void onOverlayChanged();
 }
