@@ -97,6 +97,11 @@ class ScreenRecordPermissionDialogDelegate(
         ): ScreenRecordPermissionDialogDelegate
     }
 
+    private lateinit var tapsSwitch: Switch
+    private lateinit var audioSwitch: Switch
+    private lateinit var lowQualitySwitch: Switch
+    private lateinit var options: Spinner
+
     override fun createViewBinder(): BaseMediaProjectionPermissionViewBinder {
         return ScreenRecordPermissionViewBinder(
             hostUserHandle,
@@ -126,5 +131,116 @@ class ScreenRecordPermissionDialogDelegate(
             dialog.dismiss()
         }
         setCancelButtonOnClickListener { dialog.dismiss() }
+        initRecordOptionsView()
+    }
+
+    @LayoutRes override fun getOptionsViewLayoutId(): Int = R.layout.screen_record_options
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun initRecordOptionsView() {
+        // TODO(b/378514312): Move this function to ScreenRecordPermissionViewBinder
+        audioSwitch = dialog.requireViewById(R.id.screenrecord_audio_switch)
+        tapsSwitch = dialog.requireViewById(R.id.screenrecord_taps_switch)
+        lowQualitySwitch = dialog.requireViewById(R.id.screenrecord_lowquality_switch)
+
+        // Add these listeners so that the switch only responds to movement
+        // within its target region, to meet accessibility requirements
+        audioSwitch.setOnTouchListener { _, event -> event.action == ACTION_MOVE }
+        tapsSwitch.setOnTouchListener { _, event -> event.action == ACTION_MOVE }
+        lowQualitySwitch.setOnTouchListener { _, event -> event.action == ACTION_MOVE }
+
+        options = dialog.requireViewById(R.id.screen_recording_options)
+        val a: ArrayAdapter<*> =
+            ScreenRecordingAdapter(
+                dialog.context,
+                android.R.layout.simple_spinner_dropdown_item,
+                MODES,
+            )
+        a.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        options.adapter = a
+        options.setOnItemClickListenerInt { _: AdapterView<*>?, _: View?, _: Int, _: Long ->
+            audioSwitch.isChecked = true
+        }
+
+        // disable redundant Touch & Hold accessibility action for Switch Access
+        options.accessibilityDelegate =
+            object : View.AccessibilityDelegate() {
+                override fun onInitializeAccessibilityNodeInfo(
+                    host: View,
+                    info: AccessibilityNodeInfo,
+                ) {
+                    info.removeAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_LONG_CLICK)
+                    super.onInitializeAccessibilityNodeInfo(host, info)
+                }
+            }
+        options.isLongClickable = false
+    }
+
+    /**
+     * Starts screen capture after some countdown
+     *
+     * @param captureTarget target to capture (could be e.g. a task) or null to record the whole
+     *   screen
+     */
+    private fun requestScreenCapture(
+        captureTarget: MediaProjectionCaptureTarget?,
+        displayId: Int = Display.DEFAULT_DISPLAY,
+    ) {
+        val userContext = userContextProvider.userContext
+        val showTaps = getSelectedScreenShareOption().mode != SINGLE_APP && tapsSwitch.isChecked
+        val audioMode =
+            if (audioSwitch.isChecked) options.selectedItem as ScreenRecordingAudioSource
+            else ScreenRecordingAudioSource.NONE
+        val lowQuality = lowQualitySwitch.isChecked
+        val startIntent =
+            PendingIntent.getForegroundService(
+                userContext,
+                RecordingService.REQUEST_CODE,
+                RecordingService.getStartIntent(
+                    userContext,
+                    Activity.RESULT_OK,
+                    audioMode.ordinal,
+                    showTaps,
+                    displayId,
+                    captureTarget,
+                    lowQuality,
+                ),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        val stopIntent =
+            PendingIntent.getService(
+                userContext,
+                RecordingService.REQUEST_CODE,
+                RecordingService.getStopIntent(userContext),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        controller.startCountdown(DELAY_MS, INTERVAL_MS, startIntent, stopIntent)
+    }
+
+    private inner class CaptureTargetResultReceiver :
+        ResultReceiver(Handler(Looper.getMainLooper())) {
+        override fun onReceiveResult(resultCode: Int, resultData: Bundle) {
+            if (resultCode == Activity.RESULT_OK) {
+                val captureTarget =
+                    resultData.getParcelable(
+                        MediaProjectionAppSelectorActivity.KEY_CAPTURE_TARGET,
+                        MediaProjectionCaptureTarget::class.java,
+                    )
+
+                // Start recording of the selected target
+                requestScreenCapture(captureTarget)
+            }
+        }
+    }
+
+    companion object {
+        private val MODES =
+            listOf(
+                ScreenRecordingAudioSource.INTERNAL,
+                ScreenRecordingAudioSource.MIC,
+                ScreenRecordingAudioSource.MIC_AND_INTERNAL,
+            )
+        private const val DELAY_MS: Long = 3000
+        private const val INTERVAL_MS: Long = 1000
     }
 }
