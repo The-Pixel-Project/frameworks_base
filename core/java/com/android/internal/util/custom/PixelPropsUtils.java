@@ -1,6 +1,8 @@
 /*
- * Copyright (C) 2020-2024 The Pixel Experience Project
- *               2021-2024 crDroid Android Project
+ * Copyright (C) 2022 The Pixel Experience Project
+ *               2021-2022 crDroid Android Project
+ *           (C) 2023 ArrowOS
+ *           (C) 2023 The LibreMobileOS Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +17,12 @@
  * limitations under the License.
  */
 
-package com.android.internal.util.custom;
+package com.android.internal.util.derp;
 
 import android.app.Application;
+import android.content.Context;
+import android.content.pm.PackageManager;
+import android.os.Binder;
 import android.os.Build;
 import android.os.SystemProperties;
 import android.util.Log;
@@ -32,28 +37,29 @@ import java.util.Map;
 public class PixelPropsUtils {
 
     private static final String TAG = PixelPropsUtils.class.getSimpleName();
-    private static final String DEVICE = "org.pixelexperience.device";
+    private static final String DEVICE = "ro.product.device";
     private static final boolean DEBUG = false;
 
     private static final Map<String, Object> propsToChangeGeneric;
-    private static final Map<String, Object> propsToChangePixel8Pro;
     private static final Map<String, Object> propsToChangePixel5a;
+    private static final Map<String, Object> propsToChangePixel8Pro;
     private static final Map<String, Object> propsToChangePixelXL;
     private static final Map<String, ArrayList<String>> propsToKeep;
 
     // Packages to Spoof as Pixel 8 Pro
     private static final String[] packagesToChangePixel8Pro = {
+            "com.android.chrome",
             "com.android.vending",
+            "com.google.android.apps.bard",
             "com.google.android.apps.customization.pixel",
             "com.google.android.apps.emojiwallpaper",
             "com.google.android.apps.privacy.wildlife",
-            "com.google.android.apps.subscriptions.red",
             "com.google.android.apps.wallpaper",
             "com.google.android.apps.wallpaper.pixel",
-            "com.google.android.googlequicksearchbox",
             "com.google.android.wallpaper.effects",
             "com.google.pixel.livewallpaper",
             "com.nhs.online.nhsonline",
+            "com.netflix.mediaclient"
     };
 
     // Packages to Spoof as Pixel 5a
@@ -62,27 +68,25 @@ public class PixelPropsUtils {
             "com.breel.wallpapers20"
     };
 
-    // Extra packages to Spoof (as Pixel 5a)
-    private static final String[] extraPackagesToChange = {
-            "com.android.chrome",
-            "com.breel.wallpapers20",
-            "com.nhs.online.nhsonline",
-            "com.nothing.smartcenter"
-    };
-
     // Packages to Keep with original device
     private static final String[] packagesToKeep = {
+            "com.google.android.apps.dreamlinerupdater",
+            "com.google.android.apps.dreamliner",
             "com.google.android.apps.motionsense.bridge",
             "com.google.android.apps.nexuslauncher",
             "com.google.android.apps.pixelmigrate",
             "com.google.android.apps.recorder",
             "com.google.android.apps.restore",
+            "com.google.android.apps.subscriptions.red",
             "com.google.android.apps.tachyon",
             "com.google.android.apps.tycho",
             "com.google.android.apps.wearables.maestro.companion",
+            "com.google.android.googlequicksearchbox",
             "com.google.android.apps.youtube.kids",
             "com.google.android.apps.youtube.music",
             "com.google.android.as",
+            "com.google.android.backup",
+            "com.google.android.backuptransport",
             "com.google.android.dialer",
             "com.google.android.euicc",
             "com.google.android.setupwizard",
@@ -92,31 +96,9 @@ public class PixelPropsUtils {
             "com.google.oslo"
     };
 
-    private static final String[] customGoogleCameraPackages = {
-            "com.google.android.MTCL83",
-            "com.google.android.UltraCVM",
-            "com.google.android.apps.cameralite"
-    };
-
-    // Codenames for currently supported Pixels by Google
-    private static final String[] pixelCodenames = {
-            "husky",
-            "shiba",
-            "felix",
-            "tangorpro",
-            "lynx",
-            "cheetah",
-            "panther",
-            "bluejay",
-            "oriole",
-            "raven",
-            "barbet",
-            "bramble",
-            "sunfish"
-    };
-
     private static volatile boolean sIsGms = false;
     private static volatile boolean sIsFinsky = false;
+    private static volatile boolean sIsExcluded = false;
 
     static {
         propsToKeep = new HashMap<>();
@@ -131,8 +113,8 @@ public class PixelPropsUtils {
         propsToChangePixel8Pro.put("PRODUCT", "husky");
         propsToChangePixel8Pro.put("HARDWARE", "husky");
         propsToChangePixel8Pro.put("MODEL", "Pixel 8 Pro");
-        propsToChangePixel8Pro.put("ID", "UQ1A.240205.004");
-        propsToChangePixel8Pro.put("FINGERPRINT", "google/husky/husky:14/UQ1A.240205.004/11269751:user/release-keys");
+        propsToChangePixel8Pro.put("ID", "AP1A.240505.005");
+        propsToChangePixel8Pro.put("FINGERPRINT", "google/husky/husky:14/AP1A.240505.005/11677807:user/release-keys");
         propsToChangePixel5a = new HashMap<>();
         propsToChangePixel5a.put("BRAND", "google");
         propsToChangePixel5a.put("MANUFACTURER", "Google");
@@ -140,8 +122,8 @@ public class PixelPropsUtils {
         propsToChangePixel5a.put("PRODUCT", "barbet");
         propsToChangePixel5a.put("HARDWARE", "barbet");
         propsToChangePixel5a.put("MODEL", "Pixel 5a");
-        propsToChangePixel5a.put("ID", "UQ1A.240205.002");
-        propsToChangePixel5a.put("FINGERPRINT", "google/barbet/barbet:14/UQ1A.240205.002/11224170:user/release-keys");
+        propsToChangePixel5a.put("ID", "AP1A.240505.004");
+        propsToChangePixel5a.put("FINGERPRINT", "google/barbet/barbet:14/AP1A.240505.004/11583682:user/release-keys");
         propsToChangePixelXL = new HashMap<>();
         propsToChangePixelXL.put("BRAND", "google");
         propsToChangePixelXL.put("MANUFACTURER", "Google");
@@ -153,54 +135,42 @@ public class PixelPropsUtils {
         propsToChangePixelXL.put("FINGERPRINT", "google/marlin/marlin:10/QP1A.191005.007.A3/5972272:user/release-keys");
     }
 
-    private static boolean isGoogleCameraPackage(String packageName) {
-        return packageName.startsWith("com.google.android.GoogleCamera") ||
-                Arrays.asList(customGoogleCameraPackages).contains(packageName);
-    }
-
-    private static void spoofBuildGms() {
-        // Alter build parameters to avoid hardware attestation enforcement
-        setPropValue("BRAND", "Hisense");
-        setPropValue("MANUFACTURER", "Hisense");
-        setPropValue("DEVICE", "HS6735MT");
-        setPropValue("ID", "MRA58K");
-        setPropValue("FINGERPRINT", "Hisense/F30/HS6735MT:6.0/MRA58K/L1228.6.01.01:user/release-keys");
-        setPropValue("MODEL", "Hisense F30");
-        setPropValue("PRODUCT", "F30");
-        setVersionFieldString("SECURITY_PATCH", "2016-02-01");
-    }
-
     public static void setProps(String packageName) {
         propsToChangeGeneric.forEach((k, v) -> setPropValue(k, v));
 
         if (packageName == null || packageName.isEmpty()) {
             return;
         }
-
-        Map<String, Object> propsToChange = new HashMap<>();
-
-        boolean isPixelDevice = Arrays.asList(pixelCodenames).contains(SystemProperties.get(DEVICE));
-
         if (packageName.startsWith("com.google.")
                 || packageName.startsWith("com.samsung.")
                 || Arrays.asList(packagesToChangePixel8Pro).contains(packageName)
-                || Arrays.asList(packagesToChangePixel5a).contains(packageName)
-                || Arrays.asList(extraPackagesToChange).contains(packageName)) {
+                || Arrays.asList(packagesToChangePixel5a).contains(packageName)) {
+
+            if (Arrays.asList(packagesToKeep).contains(packageName) ||
+                    packageName.startsWith("com.google.android.GoogleCamera")) {
+                sIsExcluded = true;
+                return;
+            }
+
+            Map<String, Object> propsToChange = new HashMap<>();
 
             if (packageName.equals("com.google.android.apps.photos")) {
-                propsToChange.putAll(propsToChangePixelXL);
-            } else if (Arrays.asList(packagesToKeep).contains(packageName) ||
-                       isGoogleCameraPackage(packageName) || isPixelDevice) {
-                return;
-            } else if (packageName.equals("com.android.vending")) {
-                sIsFinsky = true;
-                return;
-            } else {
-                if (Arrays.asList(packagesToChangePixel8Pro).contains(packageName)) {
-                    propsToChange.putAll(propsToChangePixel8Pro);
+                if (SystemProperties.getBoolean("persist.sys.pixelprops.gphotos", true)) {
+                    propsToChange.putAll(propsToChangePixelXL);
                 } else {
                     propsToChange.putAll(propsToChangePixel5a);
                 }
+            } else if (packageName.equals("com.netflix.mediaclient") && 
+                        !SystemProperties.getBoolean("persist.sys.pixelprops.netflix", false)) {
+                    if (DEBUG) Log.d(TAG, "Netflix spoofing disabled by system prop");
+                    return;
+            } else if (packageName.equals("com.android.vending")) {
+                sIsFinsky = true;
+                return;
+            } else if (Arrays.asList(packagesToChangePixel8Pro).contains(packageName)) {
+                propsToChange.putAll(propsToChangePixel8Pro);
+            } else {
+                propsToChange.putAll(propsToChangePixel5a);
             }
 
             if (DEBUG) Log.d(TAG, "Defining props for: " + packageName);
@@ -267,6 +237,32 @@ public class PixelPropsUtils {
         }
     }
 
+    private static void spoofBuildGms() {
+        // Alter build parameters to avoid hardware attestation enforcement
+        setPropValue("BRAND", "motorola");
+        setPropValue("MANUFACTURER", "motorola");
+        setPropValue("DEVICE", "clark");
+        setPropValue("ID", "MPHS24.49-18-8");
+        setPropValue("FINGERPRINT", "motorola/clark_retus/clark:6.0/MPHS24.49-18-8/4:user/release-keys");
+        setPropValue("MODEL", "XT1575");
+        setPropValue("PRODUCT", "clark_retus");
+        setVersionFieldString("SECURITY_PATCH", "2016-09-01");
+    }
+
+    public static boolean shouldBypassTaskPermission(Context context) {
+        // GMS doesn't have MANAGE_ACTIVITY_TASKS permission
+        final int callingUid = Binder.getCallingUid();
+        final int gmsUid;
+        try {
+            gmsUid = context.getPackageManager().getApplicationInfo(PACKAGE_GMS, 0).uid;
+            dlog("shouldBypassTaskPermission: gmsUid:" + gmsUid + " callingUid:" + callingUid);
+        } catch (Exception e) {
+            Log.e(TAG, "shouldBypassTaskPermission: unable to get gms uid", e);
+            return false;
+        }
+        return gmsUid == callingUid;
+    }
+
     private static boolean isCallerSafetyNet() {
         return sIsGms && Arrays.stream(Thread.currentThread().getStackTrace())
                 .anyMatch(elem -> elem.getClassName().contains("DroidGuard"));
@@ -274,7 +270,7 @@ public class PixelPropsUtils {
 
     public static void onEngineGetCertificateChain() {
         // Check stack for SafetyNet or Play Integrity
-        if (isCallerSafetyNet() || sIsFinsky) {
+        if ((isCallerSafetyNet() || sIsFinsky) && !sIsExcluded) {
             Log.i(TAG, "Blocked key attestation sIsGms=" + sIsGms + " sIsFinsky=" + sIsFinsky);
             throw new UnsupportedOperationException();
         }
