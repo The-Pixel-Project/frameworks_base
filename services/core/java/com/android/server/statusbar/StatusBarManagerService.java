@@ -1347,6 +1347,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         return mTracingEnabled;
     }
 
+
     /**
      * Disable status bar features. Pass the bitwise-or of the {@code #DISABLE_*} flags.
      * To re-enable everything, pass {@code #DISABLE_NONE}.
@@ -1354,6 +1355,18 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
      * Warning: Only pass {@code #DISABLE_*} flags into this function, do not use
      * {@code #DISABLE2_*} flags.
      */
+    @override
+    public void toggleCameraFlash() {
+        if (mBar != null) {
+            try {
+                mBar.toggleCameraFlash();
+            } catch (RemoteException ex) {
+                Slog.e(TAG, "Unable to toggle camera flash:", ex);
+            }
+        }
+    }
+
+    // TODO(b/117478341): make it aware of multi-display if needed.
     @Override
     public void disable(int what, IBinder token, String pkg) {
         disableForUser(what, token, pkg, mCurrentUserId);
