@@ -21,6 +21,7 @@ import static com.android.settingslib.display.BrightnessUtils.convertGammaToLine
 import static com.android.settingslib.display.BrightnessUtils.convertLinearToGammaFloat;
 
 import android.animation.ValueAnimator;
+import android.annotation.NonNull;
 import android.content.Context;
 import android.database.ContentObserver;
 import android.hardware.display.BrightnessInfo;
@@ -40,8 +41,9 @@ import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
 import android.util.Log;
 import android.util.MathUtils;
+import android.view.View;
+import android.widget.ImageView;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -51,6 +53,7 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.settingslib.RestrictedLockUtils;
 import com.android.settingslib.RestrictedLockUtilsInternal;
 import com.android.systemui.Flags;
+import com.android.systemui.res.R;
 import com.android.systemui.brightness.shared.model.BrightnessLog;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
@@ -72,19 +75,23 @@ import java.util.concurrent.Executor;
 
 public class BrightnessController implements ToggleSlider.Listener, MirroredBrightnessController {
     private static final String TAG = "CentralSurfaces.BrightnessController";
-    protected static final int SLIDER_ANIMATION_DURATION = 3000;
+    private static final int SLIDER_ANIMATION_DURATION = 3000;
 
-    protected static final int MSG_UPDATE_SLIDER = 1;
-    protected static final int MSG_ATTACH_LISTENER = 2;
-    protected static final int MSG_DETACH_LISTENER = 3;
-    protected static final int MSG_VR_MODE_CHANGED = 4;
+    private static final int MSG_UPDATE_ICON = 0;
+    private static final int MSG_UPDATE_SLIDER = 1;
+    private static final int MSG_ATTACH_LISTENER = 2;
+    private static final int MSG_DETACH_LISTENER = 3;
+    private static final int MSG_VR_MODE_CHANGED = 4;
 
-    protected static final Uri BRIGHTNESS_MODE_URI =
+    private static final Uri BRIGHTNESS_MODE_URI =
             Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS_MODE);
+
+    private final ImageView mIcon;
+    private boolean mAutomaticAvailable;
 
     private final int mDisplayId;
     private final Context mContext;
-    protected final ToggleSlider mControl;
+    private final ToggleSlider mControl;
     private final DisplayManager mDisplayManager;
     private final UserTracker mUserTracker;
     private final DisplayTracker mDisplayTracker;
@@ -109,10 +116,10 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
     private boolean mTrackingTouch = false; // Brightness adjusted via touch events.
     private volatile boolean mIsVrModeEnabled;
     private boolean mListening;
-    protected boolean mExternalChange;
+    private boolean mExternalChange;
     private boolean mControlValueInitialized;
-    protected float mBrightnessMin = PowerManager.BRIGHTNESS_MIN;
-    protected float mBrightnessMax = PowerManager.BRIGHTNESS_MAX;
+    private float mBrightnessMin = PowerManager.BRIGHTNESS_MIN;
+    private float mBrightnessMax = PowerManager.BRIGHTNESS_MAX;
     private boolean mIsBrightnessOverriddenByWindow = false;
 
     private ValueAnimator mSliderAnimator;
@@ -238,6 +245,7 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
                     Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL,
                     mUserTracker.getUserId());
             mAutomatic = automatic != Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL;
+            mMainHandler.obtainMessage(MSG_UPDATE_ICON, mAutomatic ? 1 : 0).sendToTarget();
         }
     };
 
@@ -253,20 +261,16 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
             if (info == null) {
                 return;
             }
+            mBrightnessMax = info.brightnessMaximum;
+            mBrightnessMin = info.brightnessMinimum;
+            mIsBrightnessOverriddenByWindow = info.isBrightnessOverrideByWindow;
 
-            updateBrightnessInfo(info);
             // Value is passed as intbits, since this is what the message takes.
             final int valueAsIntBits = Float.floatToIntBits(info.brightness);
             mMainHandler.obtainMessage(MSG_UPDATE_SLIDER, valueAsIntBits,
                     inVrMode ? 1 : 0).sendToTarget();
         }
     };
-
-    protected void updateBrightnessInfo(BrightnessInfo info) {
-        mBrightnessMax = info.brightnessMaximum;
-        mBrightnessMin = info.brightnessMinimum;
-        mIsBrightnessOverriddenByWindow = info.isBrightnessOverrideByWindow;
-    }
 
     private final IVrStateCallbacks mVrStateCallbacks = new IVrStateCallbacks.Stub() {
         @Override
@@ -282,6 +286,9 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
             mExternalChange = true;
             try {
                 switch (msg.what) {
+                    case MSG_UPDATE_ICON:
+                        updateIcon(mAutomatic);
+                        break;
                     case MSG_UPDATE_SLIDER:
                         updateSlider(Float.intBitsToFloat(msg.arg1), msg.arg2 != 0);
                         break;
@@ -305,7 +312,7 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
         }
     };
 
-    protected final Handler mMainHandler;
+    private final Handler mMainHandler;
 
     private final UserTracker.Callback mUserChangedCallback =
             new UserTracker.Callback() {
@@ -319,6 +326,7 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
     @AssistedInject
     public BrightnessController(
             Context context,
+            @Assisted ImageView icon,
             @Assisted ToggleSlider control,
             UserTracker userTracker,
             DisplayTracker displayTracker,
@@ -330,6 +338,7 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
             @Main Looper mainLooper,
             @Background Handler bgHandler) {
         mContext = context;
+        mIcon = icon;
         mControl = control;
         mControl.setMax(GAMMA_SPACE_MAX);
         mMainExecutor = mainExecutor;
@@ -344,6 +353,26 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
 
         mMainHandler = new Handler(mainLooper, mHandlerCallback);
         mBrightnessObserver = new BrightnessObserver(mMainHandler);
+        mAutomaticAvailable = context.getResources().getBoolean(
+                com.android.internal.R.bool.config_automatic_brightness_available);
+
+        if (mIcon != null) {
+            if (mAutomaticAvailable) {
+                mIcon.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        int newMode = mAutomatic ? Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL : Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC;
+                        setMode(newMode);
+                    }
+                });
+            }
+        }
+    }
+
+    private void setMode(int mode) {
+        Settings.System.putIntForUser(mContext.getContentResolver(),
+                Settings.System.SCREEN_BRIGHTNESS_MODE, mode,
+                mUserTracker.getUserId());
     }
 
     public void registerCallbacks() {
@@ -450,6 +479,17 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
         return mContext.getDisplay().getBrightnessInfo();
     }
 
+    private void updateIcon(boolean automatic) {
+        if (mIcon != null) {
+            mIcon.setImageResource(automatic ?
+                    R.drawable.ic_qs_brightness_auto_on :
+                    R.drawable.ic_qs_brightness_auto_off);
+            mIcon.setBackgroundResource(automatic ?
+                    R.drawable.bg_qs_brightness_auto_on :
+                    R.drawable.bg_qs_brightness_auto_off);
+        }
+    }
+
     private void updateVrMode(boolean isEnabled) {
         if (mIsVrModeEnabled != isEnabled) {
             mIsVrModeEnabled = isEnabled;
@@ -463,7 +503,7 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
         return !mAutomatic && !mTrackingTouch;
     }
 
-    protected void updateSlider(float brightnessValue, boolean inVrMode) {
+    private void updateSlider(float brightnessValue, boolean inVrMode) {
         final float min = mBrightnessMin;
         final float max = mBrightnessMax;
 
@@ -506,18 +546,13 @@ public class BrightnessController implements ToggleSlider.Listener, MirroredBrig
         mSliderAnimator.start();
     }
 
-    /** Factory interface for creating a {@link BrightnessController}. */
-    public interface Factory {
-        @NonNull
-        BrightnessController create(ToggleSlider toggleSlider);
-    }
+
 
     /** Factory for creating a {@link BrightnessController}. */
     @AssistedFactory
-    public interface BrightnessControllerFactory extends Factory {
+    public interface Factory {
         /** Create a {@link BrightnessController} */
-        @NonNull
-        BrightnessController create(ToggleSlider toggleSlider);
+        BrightnessController create(ImageView icon, ToggleSlider toggleSlider);
     }
 
     private void logBrightnessChange(int display, float value, boolean starting) {
