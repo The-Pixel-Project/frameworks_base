@@ -27,7 +27,6 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.statusbar.NotificationLockscreenUserManager
-import com.android.systemui.statusbar.NotificationLockscreenUserManager.REDACTION_TYPE_PUBLIC
 import com.android.systemui.statusbar.notification.collection.GroupEntry
 import com.android.systemui.statusbar.notification.collection.NotificationEntry
 import com.android.systemui.statusbar.notification.collection.provider.SectionStyleProvider
@@ -80,7 +79,7 @@ constructor(
             secureSettings.registerContentObserverForUserSync(
                 SHOW_NOTIFICATION_SNOOZE,
                 settingsObserver,
-                UserHandle.USER_ALL,
+                UserHandle.USER_ALL
             )
         }
         dirtyListeners.addIfAbsent(listener)
@@ -124,7 +123,7 @@ constructor(
         val parent = entry.parent ?: error("Entry must have a parent to determine if minimized")
         val isMinimizedSection = sectionStyleProvider.isMinimizedSection(section)
         val isTopLevelEntry = parent == GroupEntry.ROOT_ENTRY
-        val isGroupSummary = (parent as? GroupEntry)?.summary == entry
+        val isGroupSummary = parent.summary == entry
         return isMinimizedSection && (isTopLevelEntry || isGroupSummary)
     }
 
@@ -141,17 +140,12 @@ constructor(
             isConversation = entry.ranking.isConversation,
             isSnoozeEnabled = isSnoozeSettingsEnabled && !entry.isCanceled,
             isMinimized = isEntryMinimized(entry),
-            redactionType =
-                if (
-                    screenshareNotificationHiding() &&
-                        sensitiveNotifProtectionController.shouldProtectNotification(entry)
-                ) {
-                    REDACTION_TYPE_PUBLIC
-                } else {
-                    lockscreenUserManager.getRedactionType(entry)
-                },
+            needsRedaction =
+                entry.sbn.isContentSecure ||
+                lockscreenUserManager.needsRedaction(entry) ||
+                    (screenshareNotificationHiding() &&
+                        sensitiveNotifProtectionController.shouldProtectNotification(entry)),
             isChildInGroup = entry.hasEverBeenGroupChild(),
             isGroupSummary = entry.hasEverBeenGroupSummary(),
-            summarization = entry.ranking.summarization
         )
 }

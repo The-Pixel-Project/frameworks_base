@@ -124,9 +124,8 @@ public abstract class ActivityTaskManagerInternal {
     public static final String ASSIST_KEY_RECEIVER_EXTRAS = "receiverExtras";
 
     public interface ScreenObserver {
-        default void onAwakeStateChanged(boolean isAwake) {}
-        default void onKeyguardStateChanged(boolean isShowing) {}
-        default void onKeyguardGoingAway() {}
+        void onAwakeStateChanged(boolean isAwake);
+        void onKeyguardStateChanged(boolean isShowing);
     }
 
     /**
@@ -618,9 +617,6 @@ public abstract class ActivityTaskManagerInternal {
      */
     public abstract boolean isBaseOfLockedTask(String packageName);
 
-    /** Returns the value of {@link android.R.attr#windowNoDisplay} from the given theme. */
-    public abstract boolean isNoDisplay(String packageName, int theme, int userId);
-
     /**
      * Creates an interface to update configuration for the calling application.
      */
@@ -804,9 +800,5 @@ public abstract class ActivityTaskManagerInternal {
     /** Returns whether assist data is allowed. */
     public abstract boolean isAssistDataAllowed();
 
-    /**
-     * Delegate back gesture request from shell.
-     * Returns true if the back gesture request was successful, false otherwise.
-     */
-    public abstract boolean requestBackGesture();
+    public abstract boolean isVisibleActivity(IBinder activityToken);
 }
