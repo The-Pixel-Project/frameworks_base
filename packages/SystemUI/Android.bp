@@ -208,7 +208,8 @@ android_library {
     ],
     libs: [
         "keepanno-annotations",
-    ],
+        "faceunlock_framework",
+   ],
     manifest: "AndroidManifest.xml",
 
     javacflags: [
