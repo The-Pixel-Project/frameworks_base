@@ -458,8 +458,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private static int sCurrentUser;
 
     private final boolean mFaceAuthOnlyOnSecurityView;
-    private static final int FACE_UNLOCK_BEHAVIOR_DEFAULT = 0;
-    private static final int FACE_UNLOCK_BEHAVIOR_SWIPE = 1;
+    public static final int FACE_UNLOCK_BEHAVIOR_DEFAULT = 0;
+    public static final int FACE_UNLOCK_BEHAVIOR_SWIPE = 1;
     private int mFaceUnlockBehavior = FACE_UNLOCK_BEHAVIOR_DEFAULT;
 
     public synchronized static void setCurrentUser(int currentUser) {
@@ -2935,6 +2935,21 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         return shouldListen;
     }
 
+    public int getFaceUnlockBehavior() {
+        return mFaceUnlockBehavior;
+    }
+
+    private boolean doesPostureAllowFaceAuth(@DevicePostureInt int posture) {
+        return mConfigFaceAuthSupportedPosture == DEVICE_POSTURE_UNKNOWN
+                || (posture == mConfigFaceAuthSupportedPosture);
+    }
+
+    /**
+     * If the current device posture allows face auth to run.
+     */
+    public boolean doesCurrentPostureAllowFaceAuth() {
+        return doesPostureAllowFaceAuth(mPostureState);
+    }
 
     private void logListenerModelData(@NonNull KeyguardListenModel model) {
         mLogger.logKeyguardListenerModel(model);
@@ -3042,9 +3057,23 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
      */
     @VisibleForTesting
     @Deprecated
-    public boolean isUnlockWithFacePossible() {
-        return getFaceAuthInteractor() != null
-                    && getFaceAuthInteractor().isFaceAuthEnabledAndEnrolled();
+    public boolean isUnlockWithFacePossible(int userId) {
+        if (isFaceAuthInteractorEnabled()) {
+            return getFaceAuthInteractor().canFaceAuthRun();
+        }
+        return isFaceAuthEnabledForUser(userId) && !isFaceDisabled(userId);
+    }
+
+    /**
+     * If face hardware is available, user has enrolled and enabled auth via setting.
+     *
+     * @deprecated This is being migrated to use modern architecture.
+     */
+    @Deprecated
+    public boolean isFaceAuthEnabledForUser(int userId) {
+        // TODO (b/242022358), make this rely on onEnrollmentChanged event and update it only once.
+        updateFaceEnrolled(userId);
+        return mIsFaceEnrolled;
     }
 
     private void notifyAboutEnrollmentChange(@BiometricAuthenticator.Modality int modality) {
