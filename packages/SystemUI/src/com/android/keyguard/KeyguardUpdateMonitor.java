@@ -933,6 +933,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
     private void handleFingerprintAuthenticated(int authUserId, boolean isStrongBiometric) {
         Trace.beginSection("KeyGuardUpdateMonitor#handlerFingerPrintAuthenticated");
+        if (mOccludingAppRequestingFace){
+            requestFaceAuthOnOccludingApp(false);
+        }
         if (mHandler.hasCallbacks(mFpCancelNotReceived)) {
             mLogger.d("handleFingerprintAuthenticated()"
                     + " triggered while waiting for cancellation, removing watchdog");
@@ -1182,10 +1185,28 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
     private void handleFaceAuthenticated(int authUserId, boolean isStrongBiometric) {
         Trace.beginSection("KeyGuardUpdateMonitor#handlerFaceAuthenticated");
-        if (mGoingToSleep) {
-            mLogger.d("Aborted successful auth because device is going to sleep.");
-            return;
+        if (mOccludingAppRequestingFace){
+            requestFaceAuthOnOccludingApp(false);
         }
+        try {
+            if (mGoingToSleep) {
+                mLogger.d("Aborted successful auth because device is going to sleep.");
+                return;
+            }
+            final int userId = mUserTracker.getUserId();
+            if (userId != authUserId) {
+                mLogger.logFaceAuthForWrongUser(authUserId);
+                return;
+            }
+            if (!isFaceAuthInteractorEnabled() && isFaceDisabled(userId)) {
+                mLogger.logFaceAuthDisabledForUser(userId);
+                return;
+            }
+            mLogger.logFaceAuthSuccess(userId);
+            onFaceAuthenticated(userId, isStrongBiometric);
+        } finally {
+            setFaceRunningState(BIOMETRIC_STATE_STOPPED);
+       }
         final int userId = mSelectedUserInteractor.getSelectedUserId(true);
         if (userId != authUserId) {
             mLogger.logFaceAuthForWrongUser(authUserId);
