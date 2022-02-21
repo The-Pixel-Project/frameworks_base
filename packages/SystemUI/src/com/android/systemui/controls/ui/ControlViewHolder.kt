@@ -48,13 +48,12 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.annotation.ColorInt
 import androidx.annotation.VisibleForTesting
-import com.android.app.animation.Interpolators
 import com.android.internal.graphics.ColorUtils
+import com.android.systemui.res.R
+import com.android.app.animation.Interpolators
 import com.android.systemui.controls.ControlsMetricsLogger
 import com.android.systemui.controls.controller.ControlsController
-import com.android.systemui.res.R
 import com.android.systemui.util.concurrency.DelayableExecutor
-import com.android.systemui.utils.SafeIconLoader
 import java.util.function.Supplier
 
 /**
@@ -71,7 +70,6 @@ class ControlViewHolder(
     val controlsMetricsLogger: ControlsMetricsLogger,
     val uid: Int,
     val currentUserId: Int,
-    val safeIconLoader: SafeIconLoader,
 ) {
 
     companion object {
@@ -80,8 +78,10 @@ class ControlViewHolder(
         private const val ALPHA_DISABLED = 0
         private const val STATUS_ALPHA_ENABLED = 1f
         private const val STATUS_ALPHA_DIMMED = 0.45f
-        private val FORCE_PANEL_DEVICES =
-            setOf(DeviceTypes.TYPE_THERMOSTAT, DeviceTypes.TYPE_CAMERA)
+        private val FORCE_PANEL_DEVICES = setOf(
+            DeviceTypes.TYPE_THERMOSTAT,
+            DeviceTypes.TYPE_CAMERA
+        )
         private val ATTR_ENABLED = intArrayOf(android.R.attr.state_enabled)
         private val ATTR_DISABLED = intArrayOf(-android.R.attr.state_enabled)
         const val MIN_LEVEL = 0
@@ -89,8 +89,8 @@ class ControlViewHolder(
     }
 
     private val canUseIconPredicate = CanUseIconPredicate(currentUserId)
-    private val toggleBackgroundIntensity: Float =
-        layout.context.resources.getFraction(R.fraction.controls_toggle_bg_intensity, 1, 1)
+    private val toggleBackgroundIntensity: Float = layout.context.resources
+            .getFraction(R.fraction.controls_toggle_bg_intensity, 1, 1)
     private var stateAnimator: ValueAnimator? = null
     private var statusAnimator: Animator? = null
     private val baseLayer: GradientDrawable
@@ -112,10 +112,8 @@ class ControlViewHolder(
 
     val deviceType: Int
         get() = cws.control?.let { it.deviceType } ?: cws.ci.deviceType
-
     val controlStatus: Int
         get() = cws.control?.let { it.status } ?: Control.STATUS_UNKNOWN
-
     val controlTemplate: ControlTemplate
         get() = cws.control?.let { it.controlTemplate } ?: ControlTemplate.NO_TEMPLATE
 
@@ -131,15 +129,14 @@ class ControlViewHolder(
     }
 
     fun findBehaviorClass(
-        status: Int,
-        template: ControlTemplate,
-        deviceType: Int,
+            status: Int,
+            template: ControlTemplate,
+            deviceType: Int
     ): Supplier<out Behavior> {
         return when {
             status != Control.STATUS_OK -> Supplier { StatusBehavior() }
             template == ControlTemplate.NO_TEMPLATE -> Supplier { TouchBehavior() }
-            template is ThumbnailTemplate ->
-                Supplier { ThumbnailBehavior(currentUserId, safeIconLoader) }
+            template is ThumbnailTemplate -> Supplier { ThumbnailBehavior(currentUserId) }
 
             // Required for legacy support, or where cameras do not use the new template
             deviceType == DeviceTypes.TYPE_CAMERA -> Supplier { TouchBehavior() }
@@ -175,20 +172,16 @@ class ControlViewHolder(
 
         cws.control?.let {
             layout.setClickable(true)
-            layout.setOnLongClickListener(
-                View.OnLongClickListener() {
-                    controlActionCoordinator.longPress(this@ControlViewHolder)
-                    true
-                }
-            )
-
-            controlActionCoordinator.runPendingAction(cws.ci.controlId)
+            layout.setOnLongClickListener(View.OnLongClickListener() {
+                controlActionCoordinator.longPress(this@ControlViewHolder)
+                true
+            })
         }
 
         val wasLoading = isLoading
         isLoading = false
-        behavior =
-            bindBehavior(behavior, findBehaviorClass(controlStatus, controlTemplate, deviceType))
+        behavior = bindBehavior(behavior,
+            findBehaviorClass(controlStatus, controlTemplate, deviceType))
         updateContentDescription()
 
         // Only log one event per control, at the moment we have determined that the control
@@ -203,7 +196,8 @@ class ControlViewHolder(
         // OK responses signal normal behavior, and the app will provide control updates
         val failedAttempt = lastChallengeDialog != null
         when (response) {
-            ControlAction.RESPONSE_OK -> lastChallengeDialog = null
+            ControlAction.RESPONSE_OK ->
+                lastChallengeDialog = null
             ControlAction.RESPONSE_UNKNOWN -> {
                 lastChallengeDialog = null
                 setErrorStatus()
@@ -213,28 +207,18 @@ class ControlViewHolder(
                 setErrorStatus()
             }
             ControlAction.RESPONSE_CHALLENGE_PIN -> {
-                lastChallengeDialog =
-                    ChallengeDialogs.createPinDialog(
-                        this,
-                        false /* useAlphanumeric */,
-                        failedAttempt,
-                        onDialogCancel,
-                    )
+                lastChallengeDialog = ChallengeDialogs.createPinDialog(
+                    this, false /* useAlphanumeric */, failedAttempt, onDialogCancel)
                 lastChallengeDialog?.show()
             }
             ControlAction.RESPONSE_CHALLENGE_PASSPHRASE -> {
-                lastChallengeDialog =
-                    ChallengeDialogs.createPinDialog(
-                        this,
-                        true /* useAlphanumeric */,
-                        failedAttempt,
-                        onDialogCancel,
-                    )
+                lastChallengeDialog = ChallengeDialogs.createPinDialog(
+                    this, true /* useAlphanumeric */, failedAttempt, onDialogCancel)
                 lastChallengeDialog?.show()
             }
             ControlAction.RESPONSE_CHALLENGE_ACK -> {
-                lastChallengeDialog =
-                    ChallengeDialogs.createConfirmationDialog(this, onDialogCancel)
+                lastChallengeDialog = ChallengeDialogs.createConfirmationDialog(
+                    this, onDialogCancel)
                 lastChallengeDialog?.show()
             }
         }
@@ -249,7 +233,9 @@ class ControlViewHolder(
 
     fun setErrorStatus() {
         val text = context.resources.getString(R.string.controls_error_failed)
-        animateStatusChange(/* animated */ true, { setStatusText(text, /* immediately */ true) })
+        animateStatusChange(/* animated */ true, {
+            setStatusText(text, /* immediately */ true)
+        })
     }
 
     private fun updateContentDescription() =
@@ -268,32 +254,34 @@ class ControlViewHolder(
     fun bindBehavior(
         existingBehavior: Behavior?,
         supplier: Supplier<out Behavior>,
-        offset: Int = 0,
+        offset: Int = 0
     ): Behavior {
         val newBehavior = supplier.get()
-        val behavior =
-            if (existingBehavior == null || existingBehavior::class != newBehavior::class) {
-                // Behavior changes can signal a change in template from the app or
-                // first time setup
-                newBehavior.initialize(this)
+        val behavior = if (existingBehavior == null ||
+                existingBehavior::class != newBehavior::class) {
+            // Behavior changes can signal a change in template from the app or
+            // first time setup
+            newBehavior.initialize(this)
 
-                // let behaviors define their own, if necessary, and clear any existing ones
-                layout.setAccessibilityDelegate(null)
-                newBehavior
-            } else {
-                existingBehavior
-            }
+            // let behaviors define their own, if necessary, and clear any existing ones
+            layout.setAccessibilityDelegate(null)
+            newBehavior
+        } else {
+            existingBehavior
+        }
 
-        return behavior.also { it.bind(cws, offset) }
+        return behavior.also {
+            it.bind(cws, offset)
+        }
     }
 
     internal fun applyRenderInfo(enabled: Boolean, offset: Int, animated: Boolean = true) {
-        val deviceTypeOrError =
-            if (controlStatus == Control.STATUS_OK || controlStatus == Control.STATUS_UNKNOWN) {
-                deviceType
-            } else {
-                RenderInfo.ERROR_ICON
-            }
+        val deviceTypeOrError = if (controlStatus == Control.STATUS_OK ||
+                controlStatus == Control.STATUS_UNKNOWN) {
+            deviceType
+        } else {
+            RenderInfo.ERROR_ICON
+        }
         val ri = RenderInfo.lookup(context, cws.componentName, deviceTypeOrError, offset)
         val fg = context.resources.getColorStateList(ri.foreground, context.theme)
         val newText = nextStatusText
@@ -327,31 +315,28 @@ class ControlViewHolder(
     private fun animateBackgroundChange(
         animated: Boolean,
         enabled: Boolean,
-        @ColorRes bgColor: Int,
+        @ColorRes bgColor: Int
     ) {
         val bg = context.resources.getColor(R.color.control_default_background, context.theme)
 
-        val (newClipColor, newAlpha) =
-            if (enabled) {
-                // allow color overrides for the enabled state only
-                val color =
-                    cws.control?.getCustomColor()?.let {
-                        val state = intArrayOf(android.R.attr.state_enabled)
-                        it.getColorForState(state, it.getDefaultColor())
-                    } ?: context.resources.getColor(bgColor, context.theme)
-                listOf(color, ALPHA_ENABLED)
-            } else {
-                listOf(
-                    context.resources.getColor(R.color.control_default_background, context.theme),
-                    ALPHA_DISABLED,
-                )
-            }
-        val newBaseColor =
-            if (behavior is ToggleRangeBehavior) {
-                ColorUtils.blendARGB(bg, newClipColor, toggleBackgroundIntensity)
-            } else {
-                bg
-            }
+        val (newClipColor, newAlpha) = if (enabled) {
+            // allow color overrides for the enabled state only
+            val color = cws.control?.getCustomColor()?.let {
+                val state = intArrayOf(android.R.attr.state_enabled)
+                it.getColorForState(state, it.getDefaultColor())
+            } ?: context.resources.getColor(bgColor, context.theme)
+            listOf(color, ALPHA_ENABLED)
+        } else {
+            listOf(
+                context.resources.getColor(R.color.control_default_background, context.theme),
+                ALPHA_DISABLED
+            )
+        }
+        val newBaseColor = if (behavior is ToggleRangeBehavior) {
+            ColorUtils.blendARGB(bg, newClipColor, toggleBackgroundIntensity)
+        } else {
+            bg
+        }
 
         clipLayer.drawable?.apply {
             clipLayer.alpha = ALPHA_DISABLED
@@ -360,11 +345,7 @@ class ControlViewHolder(
                 startBackgroundAnimation(this, newAlpha, newClipColor, newBaseColor)
             } else {
                 applyBackgroundChange(
-                    this,
-                    newAlpha,
-                    newClipColor,
-                    newBaseColor,
-                    newLayoutAlpha = 1f,
+                        this, newAlpha, newClipColor, newBaseColor, newLayoutAlpha = 1f
                 )
             }
         }
@@ -374,45 +355,41 @@ class ControlViewHolder(
         clipDrawable: Drawable,
         newAlpha: Int,
         @ColorInt newClipColor: Int,
-        @ColorInt newBaseColor: Int,
+        @ColorInt newBaseColor: Int
     ) {
-        val oldClipColor =
-            if (clipDrawable is GradientDrawable) {
-                clipDrawable.color?.defaultColor ?: newClipColor
-            } else {
-                newClipColor
-            }
+        val oldClipColor = if (clipDrawable is GradientDrawable) {
+            clipDrawable.color?.defaultColor ?: newClipColor
+        } else {
+            newClipColor
+        }
         val oldBaseColor = baseLayer.color?.defaultColor ?: newBaseColor
         val oldAlpha = layout.alpha
 
-        stateAnimator =
-            ValueAnimator.ofInt(clipLayer.alpha, newAlpha).apply {
-                addUpdateListener {
-                    val updatedAlpha = it.animatedValue as Int
-                    val updatedClipColor =
-                        ColorUtils.blendARGB(oldClipColor, newClipColor, it.animatedFraction)
-                    val updatedBaseColor =
-                        ColorUtils.blendARGB(oldBaseColor, newBaseColor, it.animatedFraction)
-                    val updatedLayoutAlpha = MathUtils.lerp(oldAlpha, 1f, it.animatedFraction)
-                    applyBackgroundChange(
+        stateAnimator = ValueAnimator.ofInt(clipLayer.alpha, newAlpha).apply {
+            addUpdateListener {
+                val updatedAlpha = it.animatedValue as Int
+                val updatedClipColor = ColorUtils.blendARGB(oldClipColor, newClipColor,
+                        it.animatedFraction)
+                val updatedBaseColor = ColorUtils.blendARGB(oldBaseColor, newBaseColor,
+                        it.animatedFraction)
+                val updatedLayoutAlpha = MathUtils.lerp(oldAlpha, 1f, it.animatedFraction)
+                applyBackgroundChange(
                         clipDrawable,
                         updatedAlpha,
                         updatedClipColor,
                         updatedBaseColor,
-                        updatedLayoutAlpha,
-                    )
-                }
-                addListener(
-                    object : AnimatorListenerAdapter() {
-                        override fun onAnimationEnd(animation: Animator) {
-                            stateAnimator = null
-                        }
-                    }
+                        updatedLayoutAlpha
                 )
-                duration = STATE_ANIMATION_DURATION
-                interpolator = Interpolators.CONTROL_STATE
-                start()
             }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    stateAnimator = null
+                }
+            })
+            duration = STATE_ANIMATION_DURATION
+            interpolator = Interpolators.CONTROL_STATE
+            start()
+        }
     }
 
     /**
@@ -426,7 +403,7 @@ class ControlViewHolder(
         newAlpha: Int,
         @ColorInt newClipColor: Int,
         @ColorInt newBaseColor: Int,
-        newLayoutAlpha: Float,
+        newLayoutAlpha: Float
     ) {
         clipDrawable.alpha = newAlpha
         if (clipDrawable is GradientDrawable) {
@@ -446,46 +423,38 @@ class ControlViewHolder(
 
         if (isLoading) {
             statusRowUpdater.invoke()
-            statusAnimator =
-                ObjectAnimator.ofFloat(status, "alpha", STATUS_ALPHA_DIMMED).apply {
-                    repeatMode = ValueAnimator.REVERSE
-                    repeatCount = ValueAnimator.INFINITE
-                    duration = 500L
-                    interpolator = Interpolators.LINEAR
-                    startDelay = 900L
-                    start()
-                }
+            statusAnimator = ObjectAnimator.ofFloat(status, "alpha", STATUS_ALPHA_DIMMED).apply {
+                repeatMode = ValueAnimator.REVERSE
+                repeatCount = ValueAnimator.INFINITE
+                duration = 500L
+                interpolator = Interpolators.LINEAR
+                startDelay = 900L
+                start()
+            }
         } else {
-            val fadeOut =
-                ObjectAnimator.ofFloat(status, "alpha", 0f).apply {
-                    duration = 200L
-                    interpolator = Interpolators.LINEAR
-                    addListener(
-                        object : AnimatorListenerAdapter() {
-                            override fun onAnimationEnd(animation: Animator) {
-                                statusRowUpdater.invoke()
-                            }
-                        }
-                    )
-                }
-            val fadeIn =
-                ObjectAnimator.ofFloat(status, "alpha", STATUS_ALPHA_ENABLED).apply {
-                    duration = 200L
-                    interpolator = Interpolators.LINEAR
-                }
-            statusAnimator =
-                AnimatorSet().apply {
-                    playSequentially(fadeOut, fadeIn)
-                    addListener(
-                        object : AnimatorListenerAdapter() {
-                            override fun onAnimationEnd(animation: Animator) {
-                                status.alpha = STATUS_ALPHA_ENABLED
-                                statusAnimator = null
-                            }
-                        }
-                    )
-                    start()
-                }
+            val fadeOut = ObjectAnimator.ofFloat(status, "alpha", 0f).apply {
+                duration = 200L
+                interpolator = Interpolators.LINEAR
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        statusRowUpdater.invoke()
+                    }
+                })
+            }
+            val fadeIn = ObjectAnimator.ofFloat(status, "alpha", STATUS_ALPHA_ENABLED).apply {
+                duration = 200L
+                interpolator = Interpolators.LINEAR
+            }
+            statusAnimator = AnimatorSet().apply {
+                playSequentially(fadeOut, fadeIn)
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        status.alpha = STATUS_ALPHA_ENABLED
+                        statusAnimator = null
+                    }
+                })
+                start()
+            }
         }
     }
 
@@ -495,7 +464,7 @@ class ControlViewHolder(
         text: CharSequence,
         drawable: Drawable,
         color: ColorStateList,
-        control: Control?,
+        control: Control?
     ) {
         setEnabled(enabled)
 
@@ -504,30 +473,29 @@ class ControlViewHolder(
 
         status.setTextColor(color)
 
-        control?.customIcon?.takeIf(canUseIconPredicate)?.let { it ->
-            val loadedDrawable = safeIconLoader.load(it)
-            icon.setImageDrawable(loadedDrawable)
+        control?.customIcon
+                ?.takeIf(canUseIconPredicate)
+                ?.let {
+            icon.setImageIcon(it)
             icon.imageTintList = it.tintList
-            loadedDrawable
-        }
-            ?: run {
-                if (drawable is StateListDrawable) {
-                    // Only reset the drawable if it is a different resource, as it will interfere
-                    // with the image state and animation.
-                    if (icon.drawable == null || !(icon.drawable is StateListDrawable)) {
-                        icon.setImageDrawable(drawable)
-                    }
-                    val state = if (enabled) ATTR_ENABLED else ATTR_DISABLED
-                    icon.setImageState(state, true)
-                } else {
+        } ?: run {
+            if (drawable is StateListDrawable) {
+                // Only reset the drawable if it is a different resource, as it will interfere
+                // with the image state and animation.
+                if (icon.drawable == null || !(icon.drawable is StateListDrawable)) {
                     icon.setImageDrawable(drawable)
                 }
-
-                // do not color app icons
-                if (deviceType != DeviceTypes.TYPE_ROUTINE) {
-                    icon.imageTintList = color
-                }
+                val state = if (enabled) ATTR_ENABLED else ATTR_DISABLED
+                icon.setImageState(state, true)
+            } else {
+                icon.setImageDrawable(drawable)
             }
+
+            // do not color app icons
+            if (deviceType != DeviceTypes.TYPE_ROUTINE) {
+                icon.imageTintList = color
+            }
+        }
 
         chevronIcon.imageTintList = icon.imageTintList
     }
