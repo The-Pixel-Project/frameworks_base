@@ -57,6 +57,11 @@ class AppOpsPrivacyItemMonitor @Inject constructor(
                 AppOpsManager.OP_CAMERA,
                 AppOpsManager.OP_PHONE_CALL_CAMERA,
                 AppOpsManager.OP_RECORD_AUDIO,
+        val CAMERA_WHITELIST_PKG = arrayOf(
+            "org.pixelexperience.faceunlock",
+        )
+        val OPS_MIC_CAMERA = intArrayOf(AppOpsManager.OP_CAMERA,
+                AppOpsManager.OP_PHONE_CALL_CAMERA, AppOpsManager.OP_RECORD_AUDIO,
                 AppOpsManager.OP_PHONE_CALL_MICROPHONE,
                 AppOpsManager.OP_RECEIVE_AMBIENT_TRIGGER_AUDIO,
                 AppOpsManager.OP_RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO,
@@ -89,7 +94,8 @@ class AppOpsPrivacyItemMonitor @Inject constructor(
         ) {
             synchronized(lock) {
                 // Check if we care about this code right now
-                if (code in OPS_MIC_CAMERA && !micCameraAvailable) {
+                if (code in OPS_MIC_CAMERA && !micCameraAvailable
+                        || packageName in CAMERA_WHITELIST_PKG) {
                     return
                 }
                 if (code in OPS_LOCATION && !locationAvailable) {
@@ -218,6 +224,10 @@ class AppOpsPrivacyItemMonitor @Inject constructor(
             AppOpsManager.OP_RECEIVE_SANDBOX_TRIGGER_AUDIO,
             AppOpsManager.OP_RECORD_AUDIO -> PrivacyType.TYPE_MICROPHONE
             else -> return null
+        }
+        if (type == PrivacyType.TYPE_CAMERA && !micCameraAvailable
+                || appOpItem.packageName in CAMERA_WHITELIST_PKG) {
+            return null
         }
         val app = PrivacyApplication(appOpItem.packageName, appOpItem.uid)
         return PrivacyItem(type, app, appOpItem.timeStartedElapsed, appOpItem.isDisabled)
