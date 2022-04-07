@@ -98,4 +98,5 @@
         app:layout_constraintEnd_toStartOf="@id/volume_dialog_background"
         app:layout_constraintTop_toTopOf="@id/volume_dialog_main_slider_container" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.constraintlayout.motion.widget.MotionLayout>
+
