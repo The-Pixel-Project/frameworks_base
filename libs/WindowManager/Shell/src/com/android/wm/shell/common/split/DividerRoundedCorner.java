@@ -47,17 +47,15 @@ public class DividerRoundedCorner extends View {
     private InvertedRoundedCornerDrawInfo mBottomLeftCorner;
     private InvertedRoundedCornerDrawInfo mBottomRightCorner;
     private boolean mIsLeftRightSplit;
-    private boolean mIsSplitScreen;
 
     public DividerRoundedCorner(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         mDividerWidth = getResources().getDimensionPixelSize(R.dimen.split_divider_bar_width);
         mDividerBarBackground = new Paint();
         mDividerBarBackground.setColor(
-                getResources().getColor(R.color.split_divider_background, null /* theme */));
+                getResources().getColor(R.color.split_divider_background, null));
         mDividerBarBackground.setFlags(Paint.ANTI_ALIAS_FLAG);
         mDividerBarBackground.setStyle(Paint.Style.FILL);
-        mIsSplitScreen = false;
     }
 
     @Override
@@ -101,47 +99,7 @@ public class DividerRoundedCorner extends View {
     }
 
     /**
-     * Used by tiling infrastructure to specify display light/dark mode and
-     * whether handle colors should be overridden on display mode change in case
-     * of non split screen.
-     *
-     * @param isSplitScreen Whether the divider is used by split screen or tiling.
-     * @param color         Rounded corner color.
-     */
-    public void setup(boolean isSplitScreen, int color) {
-        mIsSplitScreen = isSplitScreen;
-        if (!isSplitScreen) {
-            mDividerBarBackground.setColor(color);
-        }
-    }
-
-    /**
-     * Notifies the divider of ui mode change and provides a new color.
-     *
-     * @param color The new divider rounded corner color.
-     */
-    public void onUiModeChange(int color) {
-        if (!mIsSplitScreen) {
-            mDividerBarBackground.setColor(color);
-            invalidate();
-        }
-    }
-
-    /**
-     * Notifies rounded corner view of color change.
-     *
-     * @param color The new divider rounded corner color.
-     */
-    public void onCornerColorChange(int color) {
-        if (!mIsSplitScreen) {
-            mDividerBarBackground.setColor(color);
-            invalidate();
-        }
-    }
-
-    /**
      * Set whether the rounded corner is for a left/right split.
-     *
      * @param isLeftRightSplit whether it's a left/right split or top/bottom split.
      */
     public void setIsLeftRightSplit(boolean isLeftRightSplit) {
@@ -165,16 +123,8 @@ public class DividerRoundedCorner extends View {
             mCornerPosition = cornerPosition;
 
             final RoundedCorner roundedCorner = getDisplay().getRoundedCorner(cornerPosition);
-            if (mIsSplitScreen) {
-                mRadius = roundedCorner == null ? 0 : roundedCorner.getRadius();
-            } else {
-                mRadius = mContext
-                        .getResources()
-                        .getDimensionPixelSize(
-                                com.android.wm.shell.shared.R.dimen
-                                        .desktop_windowing_freeform_rounded_corner_radius);
-            }
-
+            mRadius = roundedCorner == null ? 0 :
+                    getResources().getDimensionPixelSize(R.dimen.split_divider_corner_size);
 
             // Starts with a filled square, and then subtracting out a circle from the appropriate
             // corner.
