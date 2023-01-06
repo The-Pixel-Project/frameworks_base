@@ -13578,6 +13578,13 @@ public final class Settings {
         public static final String WINDOW_IGNORE_SECURE = "window_ignore_secure";
        
         /** Whether to show ambient instead of waking for the tap gesture
+         * Whether to trigger doze for new notifications
+         * @hide
+         */
+        public static final String DOZE_FOR_NOTIFICATIONS = "doze_for_notifications";
+
+        /**
+         * Whether to show ambient instead of waking for the tap gesture
          * @hide
          */
         public static final String DOZE_TAP_GESTURE_AMBIENT = "doze_tap_gesture_ambient";
