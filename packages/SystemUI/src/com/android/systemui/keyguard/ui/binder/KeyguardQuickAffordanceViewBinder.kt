@@ -18,9 +18,7 @@
 package com.android.systemui.keyguard.ui.binder
 
 import android.annotation.SuppressLint
-import android.content.res.ColorStateList
 import android.graphics.drawable.Animatable2
-import android.os.VibrationEffect
 import android.util.Size
 import android.view.View
 import android.view.ViewGroup
@@ -34,28 +32,26 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.keyguard.logging.KeyguardQuickAffordancesLogger
-import com.android.systemui.Flags
+import com.android.settingslib.Utils
 import com.android.systemui.animation.Expandable
 import com.android.systemui.animation.view.LaunchableImageView
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.common.ui.binder.IconViewBinder
-import com.android.systemui.common.ui.view.updateLongClickListener
 import com.android.systemui.dagger.SysUISingleton
-import com.android.systemui.keyguard.ui.viewmodel.KeyguardQuickAffordanceHapticViewModel
+import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardQuickAffordanceViewModel
 import com.android.systemui.lifecycle.repeatWhenAttached
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.VibratorHelper
 import com.android.systemui.util.doOnEnd
-import com.google.android.msdl.data.model.MSDLToken
-import com.google.android.msdl.domain.MSDLPlayer
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import com.android.app.tracing.coroutines.launchTraced as launch
 
 /** This is only for a SINGLE Quick affordance */
 @SysUISingleton
@@ -64,9 +60,8 @@ class KeyguardQuickAffordanceViewBinder
 constructor(
     private val falsingManager: FalsingManager?,
     private val vibratorHelper: VibratorHelper?,
-    private val msdlPlayer: MSDLPlayer,
     private val logger: KeyguardQuickAffordancesLogger,
-    private val hapticsViewModelFactory: KeyguardQuickAffordanceHapticViewModel.Factory,
+    @Main private val mainImmediateDispatcher: CoroutineDispatcher,
 ) {
 
     private val EXIT_DOZE_BUTTON_REVEAL_ANIMATION_DURATION_MS = 250L
@@ -76,6 +71,9 @@ constructor(
 
     /**
      * Defines interface for an object that acts as the binding between the view and its view-model.
+     *
+     * Users of the [KeyguardBottomAreaViewBinder] class should use this to control the binder after
+     * it is bound.
      */
     interface Binding {
         /** Notifies that device configuration has changed. */
@@ -93,12 +91,6 @@ constructor(
     ): Binding {
         val button = view as ImageView
         val configurationBasedDimensions = MutableStateFlow(loadFromResources(view))
-        val hapticsViewModel =
-            if (Flags.msdlFeedback()) {
-                hapticsViewModelFactory.create(viewModel)
-            } else {
-                null
-            }
         val disposableHandle =
             view.repeatWhenAttached {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -109,12 +101,15 @@ constructor(
                                 viewModel = buttonModel,
                                 messageDisplayer = messageDisplayer,
                             )
-                            hapticsViewModel?.updateActivatedHistory(buttonModel.isActivated)
                         }
                     }
 
                     launch {
-                        updateButtonAlpha(view = button, viewModel = viewModel, alphaFlow = alpha)
+                        updateButtonAlpha(
+                            view = button,
+                            viewModel = viewModel,
+                            alphaFlow = alpha,
+                        )
                     }
 
                     launch {
@@ -123,32 +118,6 @@ constructor(
                                 width = dimensions.buttonSizePx.width
                                 height = dimensions.buttonSizePx.height
                             }
-                        }
-                    }
-
-                    if (Flags.msdlFeedback()) {
-                        launch {
-                            hapticsViewModel
-                                ?.quickAffordanceHapticState
-                                ?.filter {
-                                    it !=
-                                        KeyguardQuickAffordanceHapticViewModel.HapticState
-                                            .NO_HAPTICS
-                                }
-                                ?.collect { state ->
-                                    when (state) {
-                                        KeyguardQuickAffordanceHapticViewModel.HapticState
-                                            .TOGGLE_ON -> msdlPlayer.playToken(MSDLToken.SWITCH_ON)
-                                        KeyguardQuickAffordanceHapticViewModel.HapticState
-                                            .TOGGLE_OFF ->
-                                            msdlPlayer.playToken(MSDLToken.SWITCH_OFF)
-                                        KeyguardQuickAffordanceHapticViewModel.HapticState.LAUNCH ->
-                                            msdlPlayer.playToken(MSDLToken.LONG_PRESS)
-                                        KeyguardQuickAffordanceHapticViewModel.HapticState
-                                            .NO_HAPTICS -> Unit
-                                    }
-                                    hapticsViewModel.resetLaunchingFromTriggeredResult()
-                                }
                         }
                     }
                 }
@@ -207,25 +176,25 @@ constructor(
 
         view.isActivated = viewModel.isActivated
         view.drawable.setTint(
-            view.context.getColor(
+            Utils.getColorAttrDefaultColor(
+                view.context,
                 if (viewModel.isActivated) {
-                    com.android.internal.R.color.materialColorOnPrimaryFixed
+                    com.android.internal.R.attr.materialColorOnPrimaryFixed
                 } else {
-                    com.android.internal.R.color.materialColorOnSurface
-                }
+                    com.android.internal.R.attr.materialColorOnSurface
+                },
             )
         )
 
         view.backgroundTintList =
             if (!viewModel.isSelected) {
-                ColorStateList.valueOf(
-                    view.context.getColor(
-                        if (viewModel.isActivated) {
-                            com.android.internal.R.color.materialColorPrimaryFixed
-                        } else {
-                            com.android.internal.R.color.materialColorSurfaceContainerHigh
-                        }
-                    )
+                Utils.getColorAttr(
+                    view.context,
+                    if (viewModel.isActivated) {
+                        com.android.internal.R.attr.materialColorPrimaryFixed
+                    } else {
+                        com.android.internal.R.attr.materialColorSurfaceContainerHigh
+                    }
                 )
             } else {
                 null
@@ -255,7 +224,12 @@ constructor(
                             .getDimensionPixelSize(R.dimen.keyguard_affordance_shake_amplitude)
                             .toFloat()
                     val shakeAnimator =
-                        ObjectAnimator.ofFloat(view, "translationX", -amplitude / 2, amplitude / 2)
+                        ObjectAnimator.ofFloat(
+                            view,
+                            "translationX",
+                            -amplitude / 2,
+                            amplitude / 2,
+                        )
                     shakeAnimator.duration =
                         KeyguardBottomAreaVibrations.ShakeAnimationDuration.inWholeMilliseconds
                     shakeAnimator.interpolator =
@@ -263,20 +237,19 @@ constructor(
                     shakeAnimator.doOnEnd { view.translationX = 0f }
                     shakeAnimator.start()
 
-                    vibratorHelper?.playFeedback(KeyguardBottomAreaVibrations.Shake, msdlPlayer)
+                    vibratorHelper?.vibrate(
+                        if (KeyguardBottomAreaVibrations.areAllPrimitivesSupported) {
+                            KeyguardBottomAreaVibrations.Shake
+                        } else {
+                            KeyguardBottomAreaVibrations.ShakeAlt
+                        }
+                    )
                     logger.logQuickAffordanceTapped(viewModel.configKey)
                 }
                 view.onLongClickListener =
-                    OnLongClickListener(
-                        falsingManager,
-                        viewModel,
-                        vibratorHelper,
-                        onTouchListener,
-                        msdlPlayer,
-                    )
+                    OnLongClickListener(falsingManager, viewModel, vibratorHelper, onTouchListener)
             } else {
                 view.setOnClickListener(OnClickListener(viewModel, checkNotNull(falsingManager)))
-                view.updateLongClickListener(null)
             }
         } else {
             view.onLongClickListener = null
@@ -304,7 +277,7 @@ constructor(
                 Size(
                     view.resources.getDimensionPixelSize(R.dimen.keyguard_affordance_fixed_width),
                     view.resources.getDimensionPixelSize(R.dimen.keyguard_affordance_fixed_height),
-                )
+                ),
         )
     }
 
@@ -333,8 +306,7 @@ constructor(
         private val falsingManager: FalsingManager?,
         private val viewModel: KeyguardQuickAffordanceViewModel,
         private val vibratorHelper: VibratorHelper?,
-        private val onTouchListener: KeyguardQuickAffordanceOnTouchListener,
-        private val msdlPlayer: MSDLPlayer,
+        private val onTouchListener: KeyguardQuickAffordanceOnTouchListener
     ) : View.OnLongClickListener {
         override fun onLongClick(view: View): Boolean {
             if (falsingManager?.isFalseLongTap(FalsingManager.MODERATE_PENALTY) == true) {
@@ -349,13 +321,20 @@ constructor(
                         slotId = viewModel.slotId,
                     )
                 )
-                vibratorHelper?.playFeedback(
+                vibratorHelper?.vibrate(
                     if (viewModel.isActivated) {
-                        KeyguardBottomAreaVibrations.Activated
+                        if (KeyguardBottomAreaVibrations.areAllPrimitivesSupported) {
+                            KeyguardBottomAreaVibrations.Activated
+                        } else {
+                            KeyguardBottomAreaVibrations.ActivatedAlt
+                        }
                     } else {
-                        KeyguardBottomAreaVibrations.Deactivated
-                    },
-                    msdlPlayer,
+                        if (KeyguardBottomAreaVibrations.areAllPrimitivesSupported) {
+                            KeyguardBottomAreaVibrations.Deactivated
+                        } else {
+                            KeyguardBottomAreaVibrations.DeactivatedAlt
+                        }
+                    }
                 )
             }
 
@@ -366,15 +345,7 @@ constructor(
         override fun onLongClickUseDefaultHapticFeedback(view: View) = false
     }
 
-    private data class ConfigurationBasedDimensions(val buttonSizePx: Size)
-}
-
-private fun VibratorHelper.playFeedback(effect: VibrationEffect, msdlPlayer: MSDLPlayer) {
-    if (!Flags.msdlFeedback()) {
-        vibrate(effect)
-    } else {
-        if (effect == KeyguardBottomAreaVibrations.Shake) {
-            msdlPlayer.playToken(MSDLToken.FAILURE)
-        }
-    }
+    private data class ConfigurationBasedDimensions(
+        val buttonSizePx: Size,
+    )
 }
