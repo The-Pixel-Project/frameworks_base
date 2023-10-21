@@ -20,8 +20,8 @@ import static android.app.AlarmManager.ELAPSED_REALTIME;
 import static android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP;
 import static android.app.AlarmManager.RTC;
 import static android.app.AlarmManager.RTC_WAKEUP;
-
 import static com.android.server.alarm.AlarmManagerService.PRIORITY_NORMAL;
+
 import static com.android.server.alarm.AlarmManagerService.addClampPositive;
 
 import android.app.AlarmManager;
