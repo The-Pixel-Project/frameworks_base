@@ -2806,6 +2806,14 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 && !strongerAuthRequired
                 && userDoesNotHaveTrust);
 
+        boolean shouldListenSideFpsState = true;
+        if (!isUdfps) {
+            final boolean interactiveToAuthEnabled =
+                    mFingerprintInteractiveToAuthProvider != null &&
+                            mFingerprintInteractiveToAuthProvider.isEnabled(getCurrentUser());
+            shouldListenSideFpsState =
+                    interactiveToAuthEnabled ? isDeviceInteractive() && !mGoingToSleep : true;
+        }
 
         boolean shouldListen = shouldListenKeyguardState && shouldListenUserState
                 && shouldListenBouncerState && shouldListenUdfpsState && !mBiometricPromptShowing;
