@@ -119,4 +119,7 @@
     <!-- Default values for status bar DT2S gesture -->
     <bool name="config_dt2sGestureAvailable">true</bool>
     <bool name="config_dt2sGestureEnabledByDefault">true</bool>
+
+    <!-- Enforce DisplayModeDirector to select user preferred resolution -->
+    <bool name="config_forceToUseSelectedResolution">false</bool>
 </resources>
