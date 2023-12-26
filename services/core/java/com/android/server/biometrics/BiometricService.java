@@ -543,6 +543,7 @@ public class BiometricService extends SystemService {
                     && getBiometricStatusForIdentityCheck(userId);
         }
 
+<<<<<<< HEAD
         private boolean getBiometricStatusForIdentityCheck(int userId) {
             if (com.android.settings.flags.Flags.biometricsOnboardingEducation()) {
                 if (mFingerprintEnrolledForUser.getOrDefault(userId, false /* default */)
@@ -559,11 +560,15 @@ public class BiometricService extends SystemService {
             }
         }
 
-        void notifyEnabledOnKeyguardCallbacks(int userId, int modality) {
-            List<EnabledOnKeyguardCallback> callbacks = mCallbacks;
-            final boolean enabled = getEnabledOnKeyguard(userId, modality);
-            for (int i = 0; i < callbacks.size(); i++) {
-                callbacks.get(i).notify(enabled, userId, modality);
+        void notifyEnabledOnKeyguardCallbacks(int userId) {
+            EnabledOnKeyguardCallback[] callbacks = mCallbacks.toArray(new EnabledOnKeyguardCallback[0]);
+            for (var cb : callbacks) {
+                if (cb == null) {
+                    Slog.d(TAG, "null callback in notifyEnabledOnKeyguardCallbacks", new Throwable());
+                    continue;
+                }
+                cb.notify(mBiometricEnabledOnKeyguard.getOrDefault(userId, DEFAULT_KEYGUARD_ENABLED),
+                        userId);
             }
         }
 
