@@ -73,11 +73,9 @@ import com.android.server.health.HealthServiceWrapper;
 import com.android.server.lights.LightsManager;
 import com.android.server.lights.LogicalLight;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayDeque;
@@ -161,7 +159,7 @@ public final class BatteryService extends SystemService {
     private int mLastMaxChargingVoltage;
     private int mLastChargeCounter;
     private int mLastBatteryCycleCount;
-    private int mLastCharingState;
+    private int mLastChargingState;
 
     private int mSequence = 1;
 
@@ -221,8 +219,8 @@ public final class BatteryService extends SystemService {
 
     private MetricsLogger mMetricsLogger;
 
-    private static final int MOD_TYPE_EMERGENCY = 3;
     private static final int MOD_TYPE_SUPPLEMENTAL = 2;
+    private static final int MOD_TYPE_EMERGENCY = 3;
     private BatteryProperties mBatteryModProps;
     private IMotHealth mMotHealthService = null;
     private int mLastModFlag;
@@ -400,8 +398,8 @@ public final class BatteryService extends SystemService {
                 && mHealthInfo.chargerDockOnline) {
             return true;
         }
-        if ((plugTypeSet & BatteryManager.BATTERY_PLUGGED_MOD) != 0 &&
-                  supplementalOrEmergencyModOnline() && isModBatteryActive()) {
+        if ((plugTypeSet & BatteryManager.BATTERY_PLUGGED_MOD) != 0
+                && supplementalOrEmergencyModOnline() && isModBatteryActive()) {
             return true;
         }
         return false;
@@ -520,7 +518,7 @@ public final class BatteryService extends SystemService {
         traceEnd();
     }
 
-    private static int plugType(HealthInfo healthInfo) {
+    private int plugType(HealthInfo healthInfo) {
         if (healthInfo.chargerAcOnline) {
             return BatteryManager.BATTERY_PLUGGED_AC;
         } else if (healthInfo.chargerUsbOnline) {
@@ -529,6 +527,8 @@ public final class BatteryService extends SystemService {
             return BatteryManager.BATTERY_PLUGGED_WIRELESS;
         } else if (healthInfo.chargerDockOnline) {
             return BatteryManager.BATTERY_PLUGGED_DOCK;
+        } else if (supplementalOrEmergencyModOnline()) {
+            return BatteryManager.BATTERY_PLUGGED_MOD;
         } else {
             return BATTERY_PLUGGED_NONE;
         }
@@ -542,17 +542,6 @@ public final class BatteryService extends SystemService {
             mHealthInfo.batteryStatus != BatteryManager.BATTERY_STATUS_UNKNOWN
             && mHealthInfo.batteryLevel <= mCriticalBatteryLevel;
         mPlugType = plugType(mHealthInfo);
-        if (mHealthInfo.chargerAcOnline) {
-            mPlugType = BatteryManager.BATTERY_PLUGGED_AC;
-        } else if (mHealthInfo.chargerUsbOnline) {
-            mPlugType = BatteryManager.BATTERY_PLUGGED_USB;
-        } else if (mHealthInfo.chargerWirelessOnline) {
-            mPlugType = BatteryManager.BATTERY_PLUGGED_WIRELESS;
-        } else if (supplementalOrEmergencyModOnline()) {
-            mPlugType = BatteryManager.BATTERY_PLUGGED_MOD;
-        } else {
-            mPlugType = BATTERY_PLUGGED_NONE;
-        }
 
         if (DEBUG) {
             Slog.d(TAG, "Processing new values: "
@@ -593,13 +582,12 @@ public final class BatteryService extends SystemService {
                         || mHealthInfo.batteryChargeCounterUah != mLastChargeCounter
                         || mInvalidCharger != mLastInvalidCharger
                         || mHealthInfo.batteryCycleCount != mLastBatteryCycleCount
-                        || mHealthInfo.chargingState != mLastCharingState
                         || mBatteryModProps.modLevel != mLastModLevel
                         || mBatteryModProps.modStatus != mLastModStatus
                         || mBatteryModProps.modFlag != mLastModFlag
                         || mBatteryModProps.modType != mLastModType
                         || mBatteryModProps.modPowerSource != mLastModPowerSource
-                        || mInvalidCharger != mLastInvalidCharger)) {
+                        || mHealthInfo.chargingState != mLastChargingState)) {
 
             if (mPlugType != mLastPlugType) {
                 if (mLastPlugType == BATTERY_PLUGGED_NONE) {
@@ -782,7 +770,7 @@ public final class BatteryService extends SystemService {
             mLastBatteryLevelCritical = mBatteryLevelCritical;
             mLastInvalidCharger = mInvalidCharger;
             mLastBatteryCycleCount = mHealthInfo.batteryCycleCount;
-            mLastCharingState = mHealthInfo.chargingState;
+            mLastChargingState = mHealthInfo.chargingState;
             mLastModLevel = mBatteryModProps.modLevel;
             mLastModStatus = mBatteryModProps.modStatus;
             mLastModFlag = mBatteryModProps.modFlag;
