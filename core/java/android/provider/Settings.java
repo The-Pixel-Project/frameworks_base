@@ -13412,7 +13412,7 @@ public final class Settings {
          */
         public static final String OTP_NOTIFICATION_REDACTION_LOCK_TIME =
                 "otp_redaction_lock_time";
-        
+
        /**
          * Control whether FLAG_SECURE is ignored for all windows.
          * @hide
@@ -19989,6 +19989,13 @@ public final class Settings {
          * @hide
          */
         public static final String RESTRICTED_NETWORKING_MODE = "restricted_networking_mode";
+
+	/**
+         * Control whether FLAG_SECURE is ignored for all windows.
+         * @hide
+         */
+        @Readable
+        public static final String WINDOW_IGNORE_SECURE = "window_ignore_secure";
 
         /**
          * Setting indicating whether Low Power Standby is enabled, if supported.
