@@ -1188,7 +1188,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (!mPowerKeyHandled) {
             if (!interactive) {
                 if (!mTorchGesture) {
-                    wakeUpFromPowerKey(event.getDownTime());
+                    wakeUpFromWakeKey(SystemClock.uptimeMillis(), KEYCODE_POWER, /* isDown= */ false);
                 }
             }
         } else {
@@ -1300,8 +1300,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     break;
                 }
             }
-        } else if (mTorchGesture && beganFromNonInteractive) {
-            wakeUpFromPowerKey(eventTime);
+        } else if (mTorchGesture) {
+            wakeUpFromWakeKey(eventTime, KEYCODE_POWER, /* isDown= */ false);
         }
     }
 
