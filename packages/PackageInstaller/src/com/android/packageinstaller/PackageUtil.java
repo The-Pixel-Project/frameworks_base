@@ -52,11 +52,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Objects;
-import java.util.stream.Stream;
 
 /**
  * This is a utility class for defining some utility methods and constants
@@ -72,8 +69,7 @@ public class PackageUtil {
     //intent attribute strings related to uninstall
     public static final String INTENT_ATTR_PACKAGE_NAME=PREFIX+"PackageName";
     private static final String DOWNLOADS_AUTHORITY = "downloads";
-    private static final String SPLIT_BASE_APK_SUFFIX = "base.apk";
-    private static final String SPLIT_APK_SUFFIX = ".apk";
+    private static final String SPLIT_BASE_APK_END_WITH = "base.apk";
 
     /**
      * Utility method to get package information for a given {@link File}
@@ -81,20 +77,12 @@ public class PackageUtil {
     @Nullable
     public static PackageInfo getPackageInfo(Context context, File sourceFile, int flags) {
         String filePath = sourceFile.getAbsolutePath();
-        if (filePath.endsWith(SPLIT_BASE_APK_SUFFIX)) {
+        if (filePath.endsWith(SPLIT_BASE_APK_END_WITH)) {
             File dir = sourceFile.getParentFile();
-            try (Stream<Path> list = Files.list(dir.toPath())) {
-                long count = list
-                        .filter((name) -> name.endsWith(SPLIT_APK_SUFFIX))
-                        .limit(2)
-                        .count();
-                if (count > 1) {
-                    // split apks, use file directory to get archive info
-                    filePath = dir.getPath();
-                }
-            } catch (Exception ignored) {
-                // No access to the parent directory, proceed to read app snippet
-                // from the base apk only
+            File[] dirContents = dir.listFiles();
+            if (dirContents != null && dirContents.length > 1) {
+                // split apks, use file directory to get archive info
+                filePath = dir.getPath();
             }
         }
         try {
@@ -253,10 +241,9 @@ public class PackageUtil {
         appInfo.publicSourceDir = archiveFilePath;
 
         if (appInfo.splitNames != null && appInfo.splitSourceDirs == null) {
-            final File[] files = sourceFile.getParentFile().listFiles(
-                    (dir, name) -> name.endsWith(SPLIT_APK_SUFFIX));
+            final File[] files = sourceFile.getParentFile().listFiles();
             final String[] splits = Arrays.stream(appInfo.splitNames)
-                    .map(i -> findFilePath(files, i + SPLIT_APK_SUFFIX))
+                    .map(i -> findFilePath(files, i + ".apk"))
                     .filter(Objects::nonNull)
                     .toArray(String[]::new);
 
@@ -297,9 +284,7 @@ public class PackageUtil {
     }
 
     private static String findFilePath(File[] files, String postfix) {
-        final int length = files != null ? files.length : 0;
-        for (int i = 0; i < length; i++) {
-            File file = files[i];
+        for (File file : files) {
             final String path = file.getAbsolutePath();
             if (path.endsWith(postfix)) {
                 return path;
