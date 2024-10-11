@@ -6694,6 +6694,12 @@ public final class Settings {
         public static final String SCREENSHOT_SHUTTER_SOUND = "screenshot_shutter_sound";
 
         /**
+         * Whether to show the carrier name on the lockscreen
+         * @hide
+         */
+        public static final String CARRIER_ON_LOCKSCREEN = "carrier_on_lockscreen";
+
+        /**
          * Adaptive playback
          * Automatically pause media when the volume is muted and
          * will resume automatically when volume is restored.
