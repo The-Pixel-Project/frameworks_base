@@ -543,6 +543,7 @@ android_library {
         "displaylib",
         "aconfig_settings_flags_lib",
         "vendor.lineage.powershare-V1.0-java",
+        "custom-preference",
     ],
     libs: [
         "keepanno-annotations",
@@ -737,6 +738,7 @@ android_library {
         "aconfig_settings_flags_lib",
         "kairos",
         "displaylib",
+        "custom-preference",
         "vendor.lineage.powershare-V1.0-java",
     ],
 }
