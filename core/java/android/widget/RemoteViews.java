@@ -8621,16 +8621,12 @@ public class RemoteViews implements Parcelable, Filter {
                 return context;
             }
             try {
-                ApplicationInfo sanitizedApplication = mApplication;
-                try {
-                    // Use PackageManager as the source of truth for application information, rather
-                    // than the parceled ApplicationInfo provided by the app.
-                    sanitizedApplication = context.getPackageManager().getApplicationInfoAsUser(
-                        mApplication.packageName, 0, UserHandle.getUserId(mApplication.uid));
-                } catch(SecurityException se) {
-                    Log.d(LOG_TAG, "Unable to fetch appInfo for " + mApplication.packageName);
-                }
-
+                // Use PackageManager as the source of truth for application information, rather
+                // than the parceled ApplicationInfo provided by the app.
+                ApplicationInfo sanitizedApplication =
+                        context.getPackageManager().getApplicationInfoAsUser(
+                                mApplication.packageName, 0,
+                                UserHandle.getUserId(mApplication.uid));
                 Context applicationContext = context.createApplicationContext(
                         sanitizedApplication,
                         Context.CONTEXT_RESTRICTED);
