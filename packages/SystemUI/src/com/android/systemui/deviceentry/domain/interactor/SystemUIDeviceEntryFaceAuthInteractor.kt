@@ -49,6 +49,7 @@ import com.android.systemui.log.FaceAuthenticationLogger
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.log.table.logDiffsForTable
 import com.android.systemui.power.domain.interactor.PowerInteractor
+import com.android.systemui.pocket.PocketStateReceiver
 import com.android.systemui.res.R
 import com.android.systemui.scene.domain.interactor.SceneInteractor
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
@@ -107,8 +108,17 @@ constructor(
 ) : DeviceEntryFaceAuthInteractor {
 
     private val listeners: MutableList<FaceAuthenticationListener> = mutableListOf()
+    
+    private val mPocketStateReceiver = PocketStateReceiver()
+    private var mIsDeviceInPocket = false
 
     override fun start() {
+        mPocketStateReceiver.setListener(object : PocketStateReceiver.PocketStateListener {
+            override fun onPocketStateChanged(isInPocket: Boolean) {
+                mIsDeviceInPocket = isInPocket
+            }
+        })
+        mPocketStateReceiver.register(context)
         // Todo(b/310594096): there is a dependency cycle introduced by the repository depending on
         //  KeyguardBypassController, which in turn depends on KeyguardUpdateMonitor through
         //  its other dependencies. Once bypassEnabled state is available through a repository, we
@@ -310,7 +320,7 @@ constructor(
 
     override fun isRunning(): Boolean = repository.isAuthRunning.value
 
-    override fun canFaceAuthRun(): Boolean = repository.canRunFaceAuth.value
+    override fun canFaceAuthRun(): Boolean = repository.canRunFaceAuth.value && !mIsDeviceInPocket
 
     override fun isFaceAuthStrong(): Boolean =
         facePropertyRepository.sensorInfo.value?.strength == SensorStrength.STRONG
@@ -335,6 +345,7 @@ constructor(
     override val isBypassEnabled: Flow<Boolean> = repository.isBypassEnabled
 
     private fun runFaceAuth(uiEvent: FaceAuthUiEvent, fallbackToDetect: Boolean) {
+        if (mIsDeviceInPocket) return
         faceAuthenticationStatusOverride.value = null
         faceAuthenticationLogger.authRequested(uiEvent)
         repository.requestAuthenticate(uiEvent, fallbackToDetection = fallbackToDetect)
