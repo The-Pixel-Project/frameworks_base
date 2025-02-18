@@ -696,8 +696,8 @@ class InsetsPolicy {
         // If necessary, auto can control application windows when
         // config_remoteInsetsControllerControlsSystemBars is set to true. This is useful in cases
         // where we want to dictate system bar inset state for applications.
-        return win.mAttrs.type >= WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW
-                && win.mAttrs.type <= WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
+        return win.getAttrs().type >= WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW
+                && win.getAttrs().type <= WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
     }
 
     private void dispatchTransientSystemBarsVisibilityChanged(
