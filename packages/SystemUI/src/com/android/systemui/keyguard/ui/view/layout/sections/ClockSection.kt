@@ -32,6 +32,7 @@ import androidx.constraintlayout.widget.ConstraintSet.VISIBLE
 import androidx.constraintlayout.widget.ConstraintSet.WRAP_CONTENT
 import com.android.systemui.customization.R as customR
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.keyguard.MigrateClocksToBlueprint
 import com.android.systemui.keyguard.domain.interactor.KeyguardBlueprintInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardClockInteractor
 import com.android.systemui.keyguard.shared.model.KeyguardSection
@@ -54,13 +55,13 @@ import kotlinx.coroutines.DisposableHandle
 internal fun ConstraintSet.setVisibility(views: Iterable<View>, visibility: Int) =
     views.forEach { view -> this.setVisibility(view.id, visibility) }
 
-private fun ConstraintSet.setAlpha(views: Iterable<View>, alpha: Float) =
+internal fun ConstraintSet.setAlpha(views: Iterable<View>, alpha: Float) =
     views.forEach { view -> this.setAlpha(view.id, alpha) }
 
-private fun ConstraintSet.setScaleX(views: Iterable<View>, scaleX: Float) =
+internal fun ConstraintSet.setScaleX(views: Iterable<View>, scaleX: Float) =
     views.forEach { view -> this.setScaleX(view.id, scaleX) }
 
-private fun ConstraintSet.setScaleY(views: Iterable<View>, scaleY: Float) =
+internal fun ConstraintSet.setScaleY(views: Iterable<View>, scaleY: Float) =
     views.forEach { view -> this.setScaleY(view.id, scaleY) }
 
 @SysUISingleton
@@ -81,6 +82,9 @@ constructor(
     override fun addViews(constraintLayout: ConstraintLayout) {}
 
     override fun bindData(constraintLayout: ConstraintLayout) {
+        if (!MigrateClocksToBlueprint.isEnabled) {
+            return
+        }
         disposableHandle?.dispose()
         disposableHandle =
             KeyguardClockViewBinder.bind(
@@ -95,12 +99,20 @@ constructor(
     }
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
+        if (!MigrateClocksToBlueprint.isEnabled) {
+            return
+        }
+
         keyguardClockViewModel.currentClock.value?.let { clock ->
             constraintSet.applyDeltaFrom(buildConstraints(clock, constraintSet))
         }
     }
 
     override fun removeViews(constraintLayout: ConstraintLayout) {
+        if (!MigrateClocksToBlueprint.isEnabled) {
+            return
+        }
+
         disposableHandle?.dispose()
     }
 
@@ -134,14 +146,8 @@ constructor(
         if (keyguardClockViewModel.isLargeClockVisible.value) clock.smallClock.layout
         else clock.largeClock.layout
 
-    private fun constrainWeatherClockDateIconsBarrier(constraints: ConstraintSet) {
+    fun constrainWeatherClockDateIconsBarrier(constraints: ConstraintSet) {
         constraints.apply {
-            createBarrier(
-                R.id.weather_clock_bc_smartspace_bottom,
-                Barrier.BOTTOM,
-                getDimen(ENHANCED_SMARTSPACE_HEIGHT),
-                (customR.id.weather_clock_time),
-            )
             if (
                 rootViewModel.isNotifIconContainerVisible.value.value &&
                     keyguardClockViewModel.hasAodIcons.value
@@ -170,8 +176,6 @@ constructor(
         val guideline =
             if (keyguardClockViewModel.clockShouldBeCentered.value) PARENT_ID
             else R.id.split_shade_guideline
-        val dateWeatherBelowSmallClock =
-            KeyguardSmartspaceViewModel.dateWeatherBelowSmallClock(context.resources.configuration)
         constraints.apply {
             connect(customR.id.lockscreen_clock_view_large, START, PARENT_ID, START)
             connect(customR.id.lockscreen_clock_view_large, END, guideline, END)
@@ -182,14 +186,8 @@ constructor(
                 TOP,
             )
             val largeClockTopMargin =
-                if (com.android.systemui.shared.Flags.clockReactiveSmartspaceLayout()) {
-                    keyguardClockViewModel.getLargeClockTopMargin() +
-                        getDimen(ENHANCED_SMARTSPACE_HEIGHT)
-                } else {
-                    keyguardClockViewModel.getLargeClockTopMargin() +
-                        getDimen(DATE_WEATHER_VIEW_HEIGHT) +
-                        getDimen(ENHANCED_SMARTSPACE_HEIGHT)
-                }
+                keyguardClockViewModel.getLargeClockTopMargin() +
+                    getDimen(DATE_WEATHER_VIEW_HEIGHT)
             connect(
                 customR.id.lockscreen_clock_view_large,
                 TOP,
@@ -229,6 +227,7 @@ constructor(
             val smallClockBottom =
                 keyguardClockViewModel.getSmallClockTopMargin() +
                     context.resources.getDimensionPixelSize(customR.dimen.small_clock_height)
+            val dateWeatherSmartspaceHeight = getDimen(context, DATE_WEATHER_VIEW_HEIGHT).toFloat()
             val marginBetweenSmartspaceAndNotification =
                 context.resources.getDimensionPixelSize(
                     R.dimen.keyguard_status_view_bottom_margin
@@ -239,19 +238,11 @@ constructor(
                         0
                     }
 
-            if (dateWeatherBelowSmallClock) {
-                val dateWeatherSmartspaceHeight =
-                    getDimen(context, DATE_WEATHER_VIEW_HEIGHT).toFloat()
-                clockInteractor.setNotificationStackDefaultTop(
-                    smallClockBottom +
-                        dateWeatherSmartspaceHeight +
-                        marginBetweenSmartspaceAndNotification
-                )
-            } else {
-                clockInteractor.setNotificationStackDefaultTop(
-                    (smallClockBottom + marginBetweenSmartspaceAndNotification).toFloat()
-                )
-            }
+            clockInteractor.setNotificationStackDefaultTop(
+                smallClockBottom +
+                    dateWeatherSmartspaceHeight +
+                    marginBetweenSmartspaceAndNotification
+            )
         }
 
         constrainWeatherClockDateIconsBarrier(constraints)
@@ -263,7 +254,6 @@ constructor(
 
     companion object {
         private const val DATE_WEATHER_VIEW_HEIGHT = "date_weather_view_height"
-        private const val ENHANCED_SMARTSPACE_HEIGHT = "enhanced_smartspace_height"
 
         fun getDimen(context: Context, name: String): Int {
             val res = context.packageManager.getResourcesForApplication(context.packageName)
