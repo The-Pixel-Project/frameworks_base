@@ -571,9 +571,11 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
                 clipRect.offsetTo(0, 0);
 
                 final TransitionInfo.Root animRoot = TransitionUtil.getRootFor(change, info);
+                final Rect absBounds = TransitionUtil.isClosingType(mode)
+                        ? change.getStartAbsBounds() : change.getEndAbsBounds();
                 final Point animRelOffset = new Point(
-                        change.getEndAbsBounds().left - animRoot.getOffset().x,
-                        change.getEndAbsBounds().top - animRoot.getOffset().y);
+                        absBounds.left - animRoot.getOffset().x,
+                        absBounds.top - animRoot.getOffset().y);
 
                 final boolean isActivity = change.getActivityComponent() != null;
                 if (isActivity) {
