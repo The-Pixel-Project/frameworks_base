@@ -43,7 +43,6 @@ import javax.inject.Inject
 class KeyguardSliceViewSection
 @Inject
 constructor(
-    private val context: Context,
     val smartspaceController: LockscreenSmartspaceController,
     val layoutInflater: LayoutInflater,
     @Main val handler: Handler,
@@ -87,9 +86,7 @@ constructor(
                 R.id.keyguard_slice_view,
                 ConstraintSet.START,
                 ConstraintSet.PARENT_ID,
-                ConstraintSet.START,
-                context.resources.getDimensionPixelSize(customR.dimen.clock_padding_start) +
-                    context.resources.getDimensionPixelSize(customR.dimen.status_view_margin_horizontal),
+                ConstraintSet.START
             )
             connect(
                 R.id.keyguard_slice_view,
@@ -115,5 +112,10 @@ constructor(
         }
     }
 
-    override fun removeViews(constraintLayout: ConstraintLayout) {}
+    override fun removeViews(constraintLayout: ConstraintLayout) {
+        if (!MigrateClocksToBlueprint.isEnabled) return
+        if (smartspaceController.isEnabled) return
+
+        constraintLayout.removeView(R.id.keyguard_slice_view)
+    }
 }
