@@ -542,7 +542,7 @@ android_library {
         "kairos",
         "displaylib",
         "aconfig_settings_flags_lib",
-        "vendor.lineage.powershare-V1.0-java",
+        "vendor.lineage.powershare-V1-java",
         "custom-preference",
     ],
     libs: [
@@ -739,7 +739,7 @@ android_library {
         "kairos",
         "displaylib",
         "custom-preference",
-        "vendor.lineage.powershare-V1.0-java",
+        "vendor.lineage.powershare-V1-java",
     ],
 }
 
