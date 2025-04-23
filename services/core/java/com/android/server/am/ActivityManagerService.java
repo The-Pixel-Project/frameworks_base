@@ -1074,18 +1074,25 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public void onActivityLaunched(long id, ComponentName name, int temperature, int userId) {
             mAppProfiler.onActivityLaunched();
+            ActivityManagerService.boostPriorityForLockedSection();
             synchronized (ActivityManagerService.this) {
                 ProcessRecord record = null;
                 try {
-                    record = getProcessRecordLocked(name.getPackageName(), mContext
-                            .getPackageManager().getPackageUidAsUser(name.getPackageName(), 0,
-                            userId));
-                } catch (NameNotFoundException nnfe) {
-                    // Ignore, record will be lost.
+                    try {
+                        record = getProcessRecordLocked(name.getPackageName(), mContext
+                                .getPackageManager().getPackageUidAsUser(name.getPackageName(), 0,
+                                userId));
+                    } catch (NameNotFoundException nnfe) {
+                        // Ignore, record will be lost.
+                    }
+                    mProcessList.getAppStartInfoTracker().onActivityLaunched(id, name, temperature,
+                            record);
+                } catch (Throwable th) {
+                    ActivityManagerService.resetPriorityAfterLockedSection();
+                    throw th;
                 }
-                mProcessList.getAppStartInfoTracker().onActivityLaunched(id, name, temperature,
-                        record);
             }
+            ActivityManagerService.resetPriorityAfterLockedSection();
         }
 
         @Override
@@ -1516,12 +1523,14 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public void binderDied() {
+            ActivityManagerService.boostPriorityForLockedSection();
             if (DEBUG_ALL) Slog.v(
                 TAG, "Death received in " + this
                 + " for thread " + mAppThread.asBinder());
             synchronized(ActivityManagerService.this) {
                 appDiedLocked(mApp, mPid, mAppThread, true, null);
             }
+            ActivityManagerService.resetPriorityAfterLockedSection();
         }
     }
 
@@ -1765,9 +1774,15 @@ public class ActivityManagerService extends IActivityManager.Stub
         public void handleMessage(Message msg) {
             switch (msg.what) {
             case GC_BACKGROUND_PROCESSES_MSG: {
+                ActivityManagerService.boostPriorityForLockedSection();
                 synchronized (ActivityManagerService.this) {
-                    mAppProfiler.performAppGcsIfAppropriateLocked();
+                    try {
+                        ActivityManagerService.this.mAppProfiler.performAppGcsIfAppropriateLocked();
+                    } finally {
+                        ActivityManagerService.resetPriorityAfterLockedSection();
+                    }
                 }
+                ActivityManagerService.resetPriorityAfterLockedSection();
             } break;
             case SERVICE_TIMEOUT_MSG: {
                 mServices.serviceTimeout((ProcessRecord) msg.obj);
@@ -1814,35 +1829,55 @@ public class ActivityManagerService extends IActivityManager.Stub
             } break;
             case PROC_START_TIMEOUT_MSG: {
                 ProcessRecord app = (ProcessRecord) msg.obj;
+                ActivityManagerService.boostPriorityForLockedSection();
                 synchronized (ActivityManagerService.this) {
-                    handleProcessStartOrKillTimeoutLocked(app, /* isKillTimeout */ false);
+                    try {
+                        handleProcessStartOrKillTimeoutLocked(app, false);
+                    } finally {
+                        ActivityManagerService.resetPriorityAfterLockedSection();
+                    }
                 }
+                ActivityManagerService.resetPriorityAfterLockedSection();
             } break;
             case CONTENT_PROVIDER_PUBLISH_TIMEOUT_MSG: {
                 ProcessRecord app = (ProcessRecord) msg.obj;
+                ActivityManagerService.boostPriorityForLockedSection();
                 synchronized (ActivityManagerService.this) {
-                    mCpHelper.processContentProviderPublishTimedOutLocked(app);
+                    try {
+                        mCpHelper.processContentProviderPublishTimedOutLocked(app);
+                    } finally {
+                        ActivityManagerService.resetPriorityAfterLockedSection();
+                    }
                 }
+                ActivityManagerService.resetPriorityAfterLockedSection();
             } break;
             case KILL_APPLICATION_MSG: {
+                ActivityManagerService.boostPriorityForLockedSection();
                 synchronized (ActivityManagerService.this) {
-                    final int appId = msg.arg1;
-                    final int userId = msg.arg2;
-                    SomeArgs args = (SomeArgs) msg.obj;
-                    String pkg = (String) args.arg1;
-                    String reason = (String) args.arg2;
-                    int exitInfoReason = (int) args.arg3;
-                    args.recycle();
-                    forceStopPackageLocked(pkg, appId, false, false, true, false,
-                            false, false, userId, reason, exitInfoReason);
+                    try {
+                        final int appId = msg.arg1;
+                        final int userId = msg.arg2;
+                        SomeArgs args = (SomeArgs) msg.obj;
+                        String pkg = (String) args.arg1;
+                        String reason = (String) args.arg2;
+                        int exitInfoReason = (int) args.arg3;
+                        args.recycle();
+                        forceStopPackageLocked(pkg, appId, false, false, true, false,
+                                false, false, userId, reason, exitInfoReason);
+                    } finally {
+                        ActivityManagerService.resetPriorityAfterLockedSection();
+                    }
                 }
+                ActivityManagerService.resetPriorityAfterLockedSection();
             } break;
 
                 case KILL_APP_ZYGOTE_MSG: {
+                    ActivityManagerService.boostPriorityForLockedSection();
                     synchronized (ActivityManagerService.this) {
                         final AppZygote appZygote = (AppZygote) msg.obj;
                         mProcessList.killAppZygoteIfNeededLocked(appZygote, false /* force */);
                     }
+                    ActivityManagerService.resetPriorityAfterLockedSection();
                 } break;
             case CHECK_EXCESSIVE_POWER_USE_MSG: {
                 checkExcessivePowerUsage();
@@ -1916,9 +1951,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                     handleBinderHeavyHitterAutoSamplerTimeOut();
                 } break;
                 case WAIT_FOR_CONTENT_PROVIDER_TIMEOUT_MSG: {
+                    ActivityManagerService.boostPriorityForLockedSection();
                     synchronized (ActivityManagerService.this) {
                         ((ContentProviderRecord) msg.obj).onProviderPublishStatusLocked(false);
                     }
+                    ActivityManagerService.resetPriorityAfterLockedSection();
                 } break;
                 case DISPATCH_SENDING_BROADCAST_EVENT: {
                     mBroadcastEventListeners.forEach(l ->
@@ -1977,29 +2014,36 @@ public class ActivityManagerService extends IActivityManager.Stub
             ApplicationInfo info = mContext.getPackageManager().getApplicationInfo(
                     "android", STOCK_PM_FLAGS | MATCH_SYSTEM_ONLY);
             mSystemThread.installSystemApplicationInfo(info, getClass().getClassLoader());
+            boostPriorityForLockedSection();
 
             synchronized (this) {
-                ProcessRecord app = mProcessList.newProcessRecordLocked(info, info.processName,
-                        false,
-                        0,
-                        false,
-                        0,
-                        null,
-                        new HostingRecord(HostingRecord.HOSTING_TYPE_SYSTEM));
-                app.setPersistent(true);
-                app.setPid(MY_PID);
-                mProcessStateController.setMaxAdj(app, ProcessList.SYSTEM_ADJ);
-                app.makeActive(new ApplicationThreadDeferred(mSystemThread.getApplicationThread()),
-                        mProcessStats);
-                app.mProfile.addHostingComponentType(HOSTING_COMPONENT_TYPE_SYSTEM);
-                addPidLocked(app);
-                updateLruProcessLocked(app, false, null);
-                updateOomAdjLocked(OOM_ADJ_REASON_SYSTEM_INIT);
+                try {
+                    ProcessRecord app = mProcessList.newProcessRecordLocked(info, info.processName,
+                            false,
+                            0,
+                            false,
+                            0,
+                            null,
+                            new HostingRecord(HostingRecord.HOSTING_TYPE_SYSTEM));
+                    app.setPersistent(true);
+                    app.setPid(MY_PID);
+                    mProcessStateController.setMaxAdj(app, ProcessList.SYSTEM_ADJ);
+                    app.makeActive(new ApplicationThreadDeferred(mSystemThread.getApplicationThread()),
+                            mProcessStats);
+                    app.mProfile.addHostingComponentType(HOSTING_COMPONENT_TYPE_SYSTEM);
+                    addPidLocked(app);
+                    updateLruProcessLocked(app, false, null);
+                    updateOomAdjLocked(OOM_ADJ_REASON_SYSTEM_INIT);
+                } catch (Throwable th) {
+                    resetPriorityAfterLockedSection();
+                    throw th;
+                }
             }
         } catch (PackageManager.NameNotFoundException e) {
             throw new RuntimeException(
                     "Unable to find android system package", e);
         }
+        resetPriorityAfterLockedSection();
 
         // Start watching app ops after we and the package manager are up and running.
         mAppOpsService.startWatchingMode(AppOpsManager.OP_RUN_IN_BACKGROUND, null,
@@ -2027,11 +2071,18 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     public void setWindowManager(WindowManagerService wm) {
+        boostPriorityForLockedSection();
         synchronized (this) {
-            mWindowManager = wm;
-            mWmInternal = LocalServices.getService(WindowManagerInternal.class);
-            mActivityTaskManager.setWindowManager(wm);
+            try {
+                mWindowManager = wm;
+                mWmInternal = LocalServices.getService(WindowManagerInternal.class);
+                mActivityTaskManager.setWindowManager(wm);
+            } catch (Throwable th) {
+                resetPriorityAfterLockedSection();
+                throw th;
+            }
         }
+        resetPriorityAfterLockedSection();
     }
 
     /**
@@ -2257,9 +2308,16 @@ public class ActivityManagerService extends IActivityManager.Stub
                 UserInfo userInfo = umInternal.getUserInfo(user.getUserIdentifier());
 
                 if (userInfo != null && userInfo.isPrivateProfile()) {
+                    ActivityManagerService.boostPriorityForLockedSection();
                     synchronized (mService) {
-                        mService.mPrivateSpaceBootCompletedPackages.clear();
+                        try {
+                            this.mService.mPrivateSpaceBootCompletedPackages.clear();
+                        } catch (Throwable th) {
+                            ActivityManagerService.resetPriorityAfterLockedSection();
+                            throw th;
+                        }
                     }
+                    ActivityManagerService.resetPriorityAfterLockedSection();
                 }
             }
         }
@@ -2770,11 +2828,18 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void batterySendBroadcast(Intent intent) {
+        boostPriorityForLockedSection();
         synchronized (this) {
-            broadcastIntentLocked(null, null, null, intent, null, null, 0, null, null, null, null,
-                    null, OP_NONE, null, false, false, -1, SYSTEM_UID, Binder.getCallingUid(),
-                    Binder.getCallingPid(), UserHandle.USER_ALL);
+            try {
+                broadcastIntentLocked(null, null, null, intent, null, null, 0, null, null, null, null,
+                        null, OP_NONE, null, false, false, -1, SYSTEM_UID, Binder.getCallingUid(),
+                        Binder.getCallingPid(), UserHandle.USER_ALL);
+            } catch (Throwable th) {
+                resetPriorityAfterLockedSection();
+                throw th;
+            }
         }
+        resetPriorityAfterLockedSection();
     }
 
     /**
@@ -2882,6 +2947,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     boolean startIsolatedProcess(String entryPoint, String[] entryPointArgs,
             String processName, String abiOverride, int uid, Runnable crashHandler) {
+        boostPriorityForLockedSection();
         synchronized(this) {
             ApplicationInfo info = new ApplicationInfo();
             // In general the ApplicationInfo.uid isn't neccesarily equal to ProcessRecord.uid.
@@ -2905,6 +2971,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     uid, false /* isSdkSandbox */, 0 /* sdkSandboxUid */,
                     null /* sdkSandboxClientAppPackage */,
                     abiOverride, entryPoint, entryPointArgs, crashHandler);
+            resetPriorityAfterLockedSection();
             return proc != null;
         }
     }
@@ -3150,28 +3217,35 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (!isCallerShell()) {
             throw new SecurityException("Only shell can call it");
         }
+        boostPriorityForLockedSection();
         synchronized (this) {
-            final ProcessRecord app = findProcessLOSP(process, userId, "setProcessMemoryTrimLevel");
-            if (app == null) {
-                throw new IllegalArgumentException("Unknown process: " + process);
+            try {
+                final ProcessRecord app = findProcessLOSP(process, userId, "setProcessMemoryTrimLevel");
+                if (app == null) {
+                    throw new IllegalArgumentException("Unknown process: " + process);
+                }
+                final IApplicationThread thread = app.getThread();
+                if (thread == null) {
+                    throw new IllegalArgumentException("Process has no app thread");
+                }
+                if (app.mProfile.getTrimMemoryLevel() >= level) {
+                    throw new IllegalArgumentException(
+                            "Unable to set a higher trim level than current level");
+                }
+                if (!(level < ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN ||
+                        app.mState.getCurProcState() > PROCESS_STATE_IMPORTANT_FOREGROUND)) {
+                    throw new IllegalArgumentException("Unable to set a background trim level "
+                        + "on a foreground process");
+                }
+                thread.scheduleTrimMemory(level);
+                synchronized (mProcLock) {
+                    app.mProfile.setTrimMemoryLevel(level);
+                }
+            } catch (Throwable th2) {
+                resetPriorityAfterLockedSection();
+                throw th2;
             }
-            final IApplicationThread thread = app.getThread();
-            if (thread == null) {
-                throw new IllegalArgumentException("Process has no app thread");
-            }
-            if (app.mProfile.getTrimMemoryLevel() >= level) {
-                throw new IllegalArgumentException(
-                        "Unable to set a higher trim level than current level");
-            }
-            if (!(level < ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN ||
-                    app.mState.getCurProcState() > PROCESS_STATE_IMPORTANT_FOREGROUND)) {
-                throw new IllegalArgumentException("Unable to set a background trim level "
-                    + "on a foreground process");
-            }
-            thread.scheduleTrimMemory(level);
-            synchronized (mProcLock) {
-                app.mProfile.setTrimMemoryLevel(level);
-            }
+            resetPriorityAfterLockedSection();
             return true;
         }
     }
@@ -3775,6 +3849,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public boolean registerForegroundServiceObserver(IForegroundServiceObserver callback) {
+        boolean registerForegroundServiceObserverLocked;
         final int callingUid = Binder.getCallingUid();
         final int permActivityTasks = checkCallingPermission(MANAGE_ACTIVITY_TASKS);
         final int permAcrossUsersFull = checkCallingPermission(INTERACT_ACROSS_USERS_FULL);
@@ -3789,9 +3864,17 @@ public class ActivityManagerService extends IActivityManager.Stub
             throw new SecurityException(msg);
         }
 
+        boostPriorityForLockedSection();
         synchronized (this) {
-            return mServices.registerForegroundServiceObserverLocked(callingUid, callback);
+            try {
+                registerForegroundServiceObserverLocked = mServices.registerForegroundServiceObserverLocked(callingUid, callback);
+            } catch (Throwable th) {
+                resetPriorityAfterLockedSection();
+                throw th;
+            }
         }
+        resetPriorityAfterLockedSection();
+        return registerForegroundServiceObserverLocked;
     }
 
     @Override
@@ -3900,14 +3983,24 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         if (proc != null) {
             ArraySet<String> pkgDeps = proc.getPkgDeps();
+            boostPriorityForLockedSection();
             synchronized (this) {
-                synchronized (mProcLock) {
-                    if (pkgDeps == null) {
-                        proc.setPkgDeps(pkgDeps = new ArraySet<String>(1));
+                try {
+                    ActivityManagerGlobalLock activityManagerGlobalLock = this.mProcLock;
+                    boostPriorityForProcLockedSection();
+                    synchronized (mProcLock) {
+                        if (pkgDeps == null) {
+                            proc.setPkgDeps(pkgDeps = new ArraySet<String>(1));
+                        }
+                        pkgDeps.add(packageName);
                     }
-                    pkgDeps.add(packageName);
+                    resetPriorityAfterProcLockedSection();
+                } catch (Throwable th2) {
+                    resetPriorityAfterLockedSection();
+                    throw th2;
                 }
             }
+            resetPriorityAfterLockedSection();
         }
     }
 
@@ -4096,20 +4189,27 @@ public class ActivityManagerService extends IActivityManager.Stub
         int callerUid = Binder.getCallingUid();
         // Only the system server can kill an application
         if (callerUid == SYSTEM_UID) {
+            boostPriorityForLockedSection();
             synchronized (this) {
-                ProcessRecord app = getProcessRecordLocked(processName, uid);
-                IApplicationThread thread;
-                if (app != null && (thread = app.getThread()) != null) {
-                    try {
-                        thread.scheduleSuicide();
-                    } catch (RemoteException e) {
-                        // If the other end already died, then our work here is done.
+                try {
+                    ProcessRecord app = getProcessRecordLocked(processName, uid);
+                    IApplicationThread thread;
+                    if (app != null && (thread = app.getThread()) != null) {
+                        try {
+                            thread.scheduleSuicide();
+                        } catch (RemoteException e) {
+                            // If the other end already died, then our work here is done.
+                        }
+                    } else {
+                        Slog.w(TAG, "Process/uid not found attempting kill of "
+                                + processName + " / " + uid);
                     }
-                } else {
-                    Slog.w(TAG, "Process/uid not found attempting kill of "
-                            + processName + " / " + uid);
+                } catch (Throwable th) {
+                    resetPriorityAfterLockedSection();
+                    throw th;
                 }
             }
+            resetPriorityAfterLockedSection();
         } else {
             throw new SecurityException(callerUid + " cannot kill app process: " +
                     processName);
@@ -4842,13 +4942,20 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (thread == null) {
             throw new SecurityException("Invalid application interface");
         }
+        boostPriorityForLockedSection();
         synchronized (this) {
-            int callingPid = Binder.getCallingPid();
-            final int callingUid = Binder.getCallingUid();
-            final long origId = Binder.clearCallingIdentity();
-            attachApplicationLocked(thread, callingPid, callingUid, startSeq);
-            Binder.restoreCallingIdentity(origId);
+            try {
+                int callingPid = Binder.getCallingPid();
+                final int callingUid = Binder.getCallingUid();
+                final long origId = Binder.clearCallingIdentity();
+                attachApplicationLocked(thread, callingPid, callingUid, startSeq);
+                Binder.restoreCallingIdentity(origId);
+            } catch (Throwable th) {
+                resetPriorityAfterLockedSection();
+                throw th;
+            }
         }
+        resetPriorityAfterLockedSection();
     }
 
     private void finishAttachApplicationInner(long startSeq, int uid, int pid) {
@@ -5038,9 +5145,16 @@ public class ActivityManagerService extends IActivityManager.Stub
         // Remove any existing duplicate messages on the handler here while no lock is being held.
         // If another follow up update is needed, it will be scheduled by OomAdjuster.
         mHandler.removeMessages(FOLLOW_UP_OOMADJUSTER_UPDATE_MSG);
+        boostPriorityForLockedSection();
         synchronized (this) {
-            mProcessStateController.runFollowUpUpdate();
+            try {
+                mProcessStateController.runFollowUpUpdate();
+            } catch (Throwable th) {
+                resetPriorityAfterLockedSection();
+                throw th;
+            }
         }
+        resetPriorityAfterLockedSection();
     }
 
     /**
@@ -7028,6 +7142,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     void startPersistentApps(int matchFlags) {
         if (mFactoryTest == FactoryTest.FACTORY_TEST_LOW_LEVEL) return;
 
+        boostPriorityForLockedSection();
         synchronized (this) {
             try {
                 final List<ApplicationInfo> apps = AppGlobals.getPackageManager()
@@ -7044,8 +7159,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                 }
             } catch (RemoteException ex) {
+                resetPriorityAfterLockedSection();
             }
         }
+        resetPriorityAfterLockedSection();
     }
 
     // =========================================================
@@ -7407,6 +7524,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     void onWakefulnessChanged(int wakefulness) {
+        boostPriorityForLockedSection();
         synchronized (this) {
             boolean wasAwake = mWakefulness.getAndSet(wakefulness)
                     == PowerManagerInternal.WAKEFULNESS_AWAKE;
@@ -7422,6 +7540,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 updateOomAdjLocked(OOM_ADJ_REASON_UI_VISIBILITY);
             }
         }
+        resetPriorityAfterLockedSection();
     }
 
     @Override
@@ -8606,6 +8725,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         if (!killCandidates.isEmpty()) {
             mHandler.post(() -> {
+                boostPriorityForLockedSection();
                 synchronized (ActivityManagerService.this) {
                     for (int i = 0, size = killCandidates.size(); i < size; i++) {
                         killCandidates.get(i).killLocked(reason,
@@ -8613,6 +8733,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                                 ApplicationExitInfo.SUBREASON_KILL_PID, true);
                     }
                 }
+                resetPriorityAfterLockedSection();
             });
         }
         return killed;
@@ -8621,6 +8742,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     private void killUid(int appId, int userId, int reason, int subReason,
             String reasonAsString) {
         enforceCallingPermission(Manifest.permission.KILL_UID, "killUid");
+        boostPriorityForLockedSection();
         synchronized (this) {
             final long identity = Binder.clearCallingIdentity();
             try {
@@ -8636,6 +8758,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             } finally {
                 Binder.restoreCallingIdentity(identity);
+                resetPriorityAfterLockedSection();
             }
         }
     }
@@ -8649,6 +8772,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public void killUidForPermissionChange(int appId, int userId, String reason) {
         enforceCallingPermission(Manifest.permission.KILL_UID, "killUid");
+        boostPriorityForLockedSection();
         synchronized (this) {
             final long identity = Binder.clearCallingIdentity();
             try {
@@ -8664,6 +8788,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             } finally {
                 Binder.restoreCallingIdentity(identity);
+                resetPriorityAfterLockedSection();
             }
         }
     }
@@ -8683,6 +8808,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         boolean killed = false;
+        boostPriorityForLockedSection();
         synchronized (this) {
             synchronized (mProcLock) {
                 synchronized (mPidsSelfLocked) {
@@ -8702,6 +8828,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
         }
+        resetPriorityAfterLockedSection();
         return killed;
     }
 
@@ -8744,8 +8871,10 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         try {
             who.linkToDeath(death, 0);
+            boostPriorityForLockedSection();
         } catch (RemoteException e) {
             Slog.w(TAG, "hang: given caller IBinder is already dead.");
+            resetPriorityAfterLockedSection();
             return;
         }
 
@@ -8762,6 +8891,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             Watchdog.getInstance().setAllowRestart(true);
         }
+        resetPriorityAfterLockedSection();
     }
 
     @Override
@@ -8804,6 +8934,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     + android.Manifest.permission.SET_ACTIVITY_WATCHER);
         }
 
+        boostPriorityForLockedSection();
         synchronized (mProcLock) {
             final long now = SystemClock.uptimeMillis();
             final long timeSinceLastIdle = now - mLastIdleTime;
@@ -8904,6 +9035,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             });
         }
+        resetPriorityAfterLockedSection();
     }
 
     @Override
@@ -8968,6 +9100,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     public void systemReady(final Runnable goingCallback, @NonNull TimingsTraceAndSlog t) {
         t.traceBegin("PhaseActivityManagerReady");
         mSystemServiceManager.preSystemReady();
+        boostPriorityForLockedSection();
         synchronized(this) {
             if (mSystemReady) {
                 // If we're done calling all the receivers, run the next "boot phase" passed in
@@ -9188,6 +9321,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             t.traceEnd(); // PhaseActivityManagerReady
         }
+        resetPriorityAfterLockedSection();
     }
 
     private class MyBinderProxyCountEventListener implements BinderProxyCountEventListener {
@@ -13589,28 +13723,36 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public List<ActivityManager.RunningServiceInfo> getServices(int maxNum, int flags) {
         enforceNotIsolatedCaller("getServices");
+        boostPriorityForLockedSection();
 
         final int callingUid = Binder.getCallingUid();
         final boolean canInteractAcrossUsers = (ActivityManager.checkUidPermission(
             INTERACT_ACROSS_USERS_FULL, callingUid) == PERMISSION_GRANTED);
         final boolean allowed = mAtmInternal.isGetTasksAllowed("getServices",
                 Binder.getCallingPid(), callingUid);
-        synchronized (this) {
-            return mServices.getRunningServiceInfoLocked(maxNum, flags, callingUid,
-                allowed, canInteractAcrossUsers);
+        try {
+            synchronized (this) {
+                return mServices.getRunningServiceInfoLocked(maxNum, flags, callingUid,
+                    allowed, canInteractAcrossUsers);
+            }
+        } finally {
+            resetPriorityAfterLockedSection();
         }
     }
 
     @Override
     public PendingIntent getRunningServiceControlPanel(ComponentName name) {
         enforceNotIsolatedCaller("getRunningServiceControlPanel");
+        boostPriorityForLockedSection();
         final int callingUid = Binder.getCallingUid();
         final int callingUserId = UserHandle.getUserId(callingUid);
         if (name == null || getPackageManagerInternal()
                 .filterAppAccess(name.getPackageName(), callingUid, callingUserId)) {
+            resetPriorityAfterLockedSection();
             return null;
         }
         synchronized (this) {
+            resetPriorityAfterLockedSection();
             return mServices.getRunningServiceControlPanelLocked(name);
         }
     }
@@ -13678,6 +13820,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (isSdkSandboxService && instanceName == null) {
             throw new IllegalArgumentException("No instance name provided for SDK sandbox process");
         }
+
         validateServiceInstanceName(instanceName);
 
         if (DEBUG_SERVICE)
@@ -13699,6 +13842,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         + "intent=" + service + ", caller=" + callingPackage
                         + ", fgRequired=" + requireForeground);
             }
+            boostPriorityForLockedSection();
             synchronized (this) {
                 res = mServices.startServiceLocked(caller, service,
                         resolvedType, callingPid, callingUid,
@@ -13710,6 +13854,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
             Binder.restoreCallingIdentity(origId);
         }
+        resetPriorityAfterLockedSection();
         return res;
     }
 
@@ -13743,6 +13888,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
                 Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "stopService: " + service);
             }
+            boostPriorityForLockedSection();
             synchronized (this) {
                 return mServices.stopServiceLocked(caller, service, resolvedType, userId,
                         isSdkSandboxService, sdkSandboxClientAppUid, sdkSandboxClientAppPackage,
@@ -13750,6 +13896,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         } finally {
             Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+            resetPriorityAfterLockedSection();
         }
     }
 
@@ -13765,7 +13912,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             throw new IllegalArgumentException("callingPackage cannot be null");
         }
 
+        boostPriorityForLockedSection();
         synchronized(this) {
+            resetPriorityAfterLockedSection();
             return mServices.peekServiceLocked(service, resolvedType, callingPackage);
         }
     }
@@ -13930,6 +14079,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "bindService:"
                         + (cn != null ? cn.toShortString() : service.getAction()));
             }
+            boostPriorityForLockedSection();
             synchronized (this) {
                 return mServices.bindServiceLocked(caller, token, service, resolvedType, connection,
                         flags, instanceName, isSdkSandboxService, sdkSandboxClientAppUid,
@@ -13938,13 +14088,16 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         } finally {
             Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+            resetPriorityAfterLockedSection();
         }
     }
 
     public void updateServiceGroup(IServiceConnection connection, int group, int importance) {
+        boostPriorityForLockedSection();
         synchronized (this) {
             mServices.updateServiceGroupLocked(connection, group, importance);
         }
+        resetPriorityAfterLockedSection();
     }
 
     public boolean unbindService(IServiceConnection connection) {
@@ -13952,11 +14105,13 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
                 Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "unbindService");
             }
+            boostPriorityForLockedSection();
             synchronized (this) {
                 return mServices.unbindServiceLocked(connection);
             }
         } finally {
             Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+            resetPriorityAfterLockedSection();
         }
     }
 
@@ -13966,11 +14121,13 @@ public class ActivityManagerService extends IActivityManager.Stub
             throw new IllegalArgumentException("File descriptors passed in Intent");
         }
 
+        boostPriorityForLockedSection();
         synchronized(this) {
             if (!(token instanceof ServiceRecord)) {
                 throw new IllegalArgumentException("Invalid service token");
             }
             mServices.publishServiceLocked((ServiceRecord)token, intent, service);
+            resetPriorityAfterLockedSection();
         }
     }
 
@@ -13980,13 +14137,16 @@ public class ActivityManagerService extends IActivityManager.Stub
             throw new IllegalArgumentException("File descriptors passed in Intent");
         }
 
+        boostPriorityForLockedSection();
         synchronized(this) {
             mServices.unbindFinishedLocked((ServiceRecord)token, intent);
         }
+        resetPriorityAfterLockedSection();
     }
 
     @Override
     public void serviceDoneExecuting(IBinder token, int type, int startId, int res, Intent intent) {
+        boostPriorityForLockedSection();
         synchronized(this) {
             if (!(token instanceof ServiceRecord)) {
                 Slog.e(TAG, "serviceDoneExecuting: Invalid service token=" + token);
@@ -13994,6 +14154,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             mServices.serviceDoneExecutingLocked((ServiceRecord) token, type, startId, res, false,
                     intent);
+            resetPriorityAfterLockedSection();
         }
     }
 
@@ -15757,9 +15918,11 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     private void trimApplications(boolean forceFullOomAdj, @OomAdjReason int oomAdjReason) {
+        boostPriorityForLockedSection();
         synchronized (this) {
             trimApplicationsLocked(forceFullOomAdj, oomAdjReason);
         }
+        resetPriorityAfterLockedSection();
     }
 
     @GuardedBy("this")
@@ -16602,6 +16765,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public void killSdkSandboxClientAppProcess(IBinder clientApplicationThreadBinder) {
+            ActivityManagerService.boostPriorityForLockedSection();
             synchronized (ActivityManagerService.this) {
                 ProcessRecord r = getRecordForAppLOSP(clientApplicationThreadBinder);
                 if (r != null) {
@@ -16612,6 +16776,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             true);
                 }
             }
+            ActivityManagerService.resetPriorityAfterLockedSection();
         }
 
         @Override
@@ -16658,12 +16823,17 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             final int numOfProcs = procs.size();
             if (numOfProcs > 0) {
+                ActivityManagerService.boostPriorityForLockedSection();
                 synchronized (ActivityManagerService.this) {
                     for (int i = 0; i < numOfProcs; i++) {
-                        mProcessList.removeProcessLocked(procs.get(i), false, true,
-                                ApplicationExitInfo.REASON_OTHER,
-                                ApplicationExitInfo.SUBREASON_KILL_ALL_FG,
-                                "kill all fg");
+                        try {
+                            mProcessList.removeProcessLocked(procs.get(i), false, true,
+                                    ApplicationExitInfo.REASON_OTHER,
+                                    ApplicationExitInfo.SUBREASON_KILL_ALL_FG,
+                                    "kill all fg");
+                        } finally {
+                            ActivityManagerService.resetPriorityAfterLockedSection();
+                        }
                     }
                 }
             }
@@ -16947,6 +17117,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         public void killProcessesForRemovedTask(ArrayList<Object> procsToKill) {
+            ActivityManagerService.boostPriorityForLockedSection();
             synchronized (ActivityManagerService.this) {
                 for (int i = 0; i < procsToKill.size(); i++) {
                     final WindowProcessController wpc =
@@ -16964,10 +17135,12 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                 }
             }
+            ActivityManagerService.resetPriorityAfterLockedSection();
         }
 
         @Override
         public void killProcess(String processName, int uid, String reason) {
+            ActivityManagerService.boostPriorityForLockedSection();
             synchronized (ActivityManagerService.this) {
                 final ProcessRecord proc = getProcessRecordLocked(processName, uid);
                 if (proc != null) {
@@ -16975,6 +17148,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             true /* allowRestart */,  ApplicationExitInfo.REASON_OTHER, reason);
                 }
             }
+            ActivityManagerService.resetPriorityAfterLockedSection();
         }
 
         @Override
@@ -16994,9 +17168,11 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public void updateOomAdj(@OomAdjReason int oomAdjReason) {
+            ActivityManagerService.boostPriorityForLockedSection();
             synchronized (ActivityManagerService.this) {
                 ActivityManagerService.this.updateOomAdjLocked(oomAdjReason);
             }
+            ActivityManagerService.resetPriorityAfterLockedSection();
         }
 
         @Override
@@ -17151,14 +17327,19 @@ public class ActivityManagerService extends IActivityManager.Stub
                 boolean serialized, boolean sticky, int userId,
                 BackgroundStartPrivileges backgroundStartPrivileges,
                 @Nullable int[] broadcastAllowList) {
-            synchronized (ActivityManagerService.this) {
-                final ProcessRecord resultToApp = getRecordForAppLOSP(resultToThread);
-                return mBroadcastController.broadcastIntentInPackage(packageName, featureId,
-                        uid, realCallingUid, realCallingPid, intent, resolvedType, resultToApp,
-                        resultTo, resultCode, resultData, resultExtras, requiredPermission,
-                        bOptions, serialized, sticky, userId,
-                        backgroundStartPrivileges,
-                        broadcastAllowList);
+            boostPriorityForLockedSection();
+            try {
+                synchronized (ActivityManagerService.this) {
+                    final ProcessRecord resultToApp = getRecordForAppLOSP(resultToThread);
+                    return mBroadcastController.broadcastIntentInPackage(packageName, featureId,
+                            uid, realCallingUid, realCallingPid, intent, resolvedType, resultToApp,
+                            resultTo, resultCode, resultData, resultExtras, requiredPermission,
+                            bOptions, serialized, sticky, userId,
+                            backgroundStartPrivileges,
+                            broadcastAllowList);
+                }
+            } finally {
+                resetPriorityAfterLockedSection();
             }
         }
 
@@ -17169,6 +17350,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 boolean serialized, int userId, int[] appIdAllowList,
                 @Nullable BiFunction<Integer, Bundle, Bundle> filterExtrasForReceiver,
                 @Nullable Bundle bOptions) {
+            ActivityManagerService.boostPriorityForLockedSection();
             synchronized (ActivityManagerService.this) {
                 intent = mBroadcastController.verifyBroadcastLocked(intent);
 
@@ -17188,6 +17370,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             appIdAllowList, filterExtrasForReceiver);
                 } finally {
                     Binder.restoreCallingIdentity(origId);
+                    ActivityManagerService.resetPriorityAfterLockedSection();
                 }
             }
         }
@@ -17221,6 +17404,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             + "intent=" + service + ", caller=" + callingPackage
                             + ", fgRequired=" + fgRequired);
                 }
+                ActivityManagerService.boostPriorityForLockedSection();
                 synchronized (ActivityManagerService.this) {
                     res = mServices.startServiceLocked(null, service,
                             resolvedType, -1, uid, fgRequired, callingPackage,
@@ -17231,6 +17415,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                 Binder.restoreCallingIdentity(origId);
             }
+            ActivityManagerService.resetPriorityAfterLockedSection();
             return res;
         }
 
@@ -17239,6 +17424,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // ConnectionRecord.
         @Override
         public void disconnectActivityFromServices(Object connectionHolder) {
+            ActivityManagerService.boostPriorityForLockedSection();
             // 'connectionHolder' is an untyped ActivityServiceConnectionsHolder
             final ActivityServiceConnectionsHolder holder =
                     (ActivityServiceConnectionsHolder) connectionHolder;
@@ -17249,12 +17435,15 @@ public class ActivityManagerService extends IActivityManager.Stub
                             false /* enqueueOomAdj */));
                 }
             }
+            ActivityManagerService.resetPriorityAfterLockedSection();
         }
 
         public void cleanUpServices(int userId, ComponentName component, Intent baseIntent) {
+            ActivityManagerService.boostPriorityForLockedSection();
             synchronized(ActivityManagerService.this) {
                 mServices.cleanUpServices(userId, component, baseIntent);
             }
+            ActivityManagerService.resetPriorityAfterLockedSection();
         }
 
         public ActivityInfo getActivityInfoForUser(ActivityInfo aInfo, int userId) {
@@ -17268,11 +17457,13 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         public void updateOomLevelsForDisplay(int displayId) {
+            ActivityManagerService.boostPriorityForLockedSection();
             synchronized(ActivityManagerService.this) {
                 if (mWindowManager != null) {
                     mProcessList.applyDisplaySize(mWindowManager);
                 }
             }
+            ActivityManagerService.resetPriorityAfterLockedSection();
         }
 
         public boolean isActivityStartsLoggingEnabled() {
@@ -17342,6 +17533,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public void broadcastGlobalConfigurationChanged(int changes, boolean initLocale) {
+            ActivityManagerService.boostPriorityForLockedSection();
             synchronized (ActivityManagerService.this) {
                 Intent intent = new Intent(Intent.ACTION_CONFIGURATION_CHANGED);
                 intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY
@@ -17392,6 +17584,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             UserHandle.USER_ALL);
                 }
             }
+            ActivityManagerService.resetPriorityAfterLockedSection();
         }
 
         /**
@@ -17446,6 +17639,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "startProcess:"
                             + processName);
                 }
+                ActivityManagerService.boostPriorityForLockedSection();
                 synchronized (ActivityManagerService.this) {
                     // If the process is known as top app, set a hint so when the process is
                     // started, the top priority can be applied immediately to avoid cpu being
@@ -17460,6 +17654,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             } finally {
                 Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+                ActivityManagerService.resetPriorityAfterLockedSection();
             }
         }
 
@@ -17949,8 +18144,13 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public ArraySet<String> getClientPackages(String servicePackageName) {
-            synchronized (ActivityManagerService.this) {
-                return mServices.getClientPackagesLocked(servicePackageName);
+            try {
+                ActivityManagerService.boostPriorityForLockedSection();
+                synchronized (ActivityManagerService.this) {
+                    return mServices.getClientPackagesLocked(servicePackageName);
+                }
+            } finally {
+                ActivityManagerService.resetPriorityAfterLockedSection();
             }
         }
 
@@ -18042,6 +18242,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Slog.w(TAG, "Invalid appid specified for pkg : " + pkgName);
                 return;
             }
+            ActivityManagerService.boostPriorityForLockedSection();
             synchronized (ActivityManagerService.this) {
                 ActivityManagerService.this.forceStopPackageLocked(pkgName, appId,
                         /* callerWillRestart= */ false, /*purgeCache= */ false,
@@ -18049,6 +18250,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         /* uninstalling= */ false, /* packageStateStopped= */ false,
                         userId, reason, exitInfoReason);
             }
+            ActivityManagerService.resetPriorityAfterLockedSection();
         }
 
         @Override
@@ -19136,10 +19338,12 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public void holdLock(IBinder token, int durationMs) {
         getTestUtilityServiceLocked().verifyHoldLockToken(token);
+        boostPriorityForLockedSection();
 
         synchronized (this) {
             SystemClock.sleep(durationMs);
         }
+        resetPriorityAfterLockedSection();
     }
 
     static void traceBegin(long traceTag, String methodName, String subInfo) {
