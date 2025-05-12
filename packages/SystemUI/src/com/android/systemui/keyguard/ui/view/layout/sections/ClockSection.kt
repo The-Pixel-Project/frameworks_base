@@ -186,7 +186,8 @@ constructor(
                 TOP,
             )
             val largeClockTopMargin =
-                keyguardClockViewModel.getLargeClockTopMargin()
+                keyguardClockViewModel.getLargeClockTopMargin() +
+                    getDimen(DATE_WEATHER_VIEW_HEIGHT)
             connect(
                 customR.id.lockscreen_clock_view_large,
                 TOP,
@@ -226,6 +227,7 @@ constructor(
             val smallClockBottom =
                 keyguardClockViewModel.getSmallClockTopMargin() +
                     context.resources.getDimensionPixelSize(customR.dimen.small_clock_height)
+            val dateWeatherSmartspaceHeight = getDimen(context, DATE_WEATHER_VIEW_HEIGHT).toFloat()
             val marginBetweenSmartspaceAndNotification =
                 context.resources.getDimensionPixelSize(
                     R.dimen.keyguard_status_view_bottom_margin
@@ -237,11 +239,26 @@ constructor(
                     }
 
             clockInteractor.setNotificationStackDefaultTop(
-                (smallClockBottom +
-                    marginBetweenSmartspaceAndNotification).toFloat()
+                smallClockBottom +
+                    dateWeatherSmartspaceHeight +
+                    marginBetweenSmartspaceAndNotification
             )
         }
 
         constrainWeatherClockDateIconsBarrier(constraints)
+    }
+
+    private fun getDimen(name: String): Int {
+        return getDimen(context, name)
+    }
+
+    companion object {
+        private const val DATE_WEATHER_VIEW_HEIGHT = "date_weather_view_height"
+
+        fun getDimen(context: Context, name: String): Int {
+            val res = context.packageManager.getResourcesForApplication(context.packageName)
+            val id = res.getIdentifier(name, "dimen", context.packageName)
+            return if (id == 0) 0 else res.getDimensionPixelSize(id)
+        }
     }
 }
