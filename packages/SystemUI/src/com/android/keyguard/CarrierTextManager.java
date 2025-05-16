@@ -703,7 +703,7 @@ public class CarrierTextManager {
 
         void updateSettings() {
             mShowCarrierText = Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.CARRIER_ON_LOCKSCREEN, 1, UserHandle.USER_CURRENT) != 0;
+                Settings.System.CARRIER_ON_LOCKSCREEN, 0, UserHandle.USER_CURRENT) != 0;
         }
 
         @Override
